@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Infinite DOM — Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 2rem; background:#f8fafc; }
+    h1 { color:#111827; }
+    .badge { background:#dbeafe; color:#1e3a8a; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.85rem; }
+    pre { background:#1f2937; color:#f9fafb; padding:1rem; border-radius:8px; overflow:auto; }
+    .card { background:white; padding:1.5rem; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:1rem; }
+    .endpoint { font-family:monospace; background:#f1f5f9; padding:0.25rem 0.5rem; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>The Infinite DOM <span class="badge">OpenEnv</span></h1>
+  <p>
+    A procedurally generated training environment for web agents. Every episode
+    spins up a fresh, live, interactive web application — same task, different
+    layout, different labels, different structure.
+  </p>
+
+  <div class="card">
+    <h2>OpenEnv endpoints</h2>
+    <ul>
+      <li><span class="endpoint">POST /reset</span> — start a new episode</li>
+      <li><span class="endpoint">POST /step</span> — execute an action</li>
+      <li><span class="endpoint">GET /state</span> — full episode state (grading)</li>
+      <li><span class="endpoint">GET /health</span> — liveness probe</li>
+      <li><span class="endpoint">GET /schema</span> — action + observation schema</li>
+      <li><span class="endpoint">GET /metadata</span> — environment metadata</li>
+      <li><span class="endpoint">WS /ws</span> — WebSocket session</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Tasks</h2>
+    <ul>
+      <li><strong>Task 1 — Clean Form:</strong> standard layout, correct ARIA, no distractors</li>
+      <li><strong>Task 2 — Label Drift:</strong> randomized button + field labels</li>
+      <li><strong>Task 3 — Structural Drift:</strong> label drift + randomized layout + field order</li>
+      <li><strong>Task 4 — Full Chaos:</strong> everything + distractors + misleading ARIA</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Quickstart</h2>
+<pre>curl -X POST http://localhost:8000/reset -H "Content-Type: application/json" -d '{"task_id": 1, "seed": 42}'
+curl -X POST http://localhost:8000/step -H "Content-Type: application/json" -d '{"action_type": "type", "element_ref": "inp_1", "text_value": "Bengaluru"}'
+curl http://localhost:8000/state</pre>
+  </div>
+</body>
+</html>

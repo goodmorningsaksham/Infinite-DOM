@@ -1,0 +1,65 @@
+spec_version: 1
+name: infinite_dom
+display_name: "The Infinite DOM"
+description: >
+  A procedurally generated training environment for web agents.
+  Every episode spins up a fresh, live, interactive web application
+  with randomized layout, labels, and structure while preserving the
+  underlying task semantics. Agents must learn semantic understanding
+  rather than positional memorization to succeed across variants.
+  Directly addresses the Patronus AI "Consumer Workflows with Schema Drift"
+  sub-theme: multi-step consumer workflows where UI schemas, label contracts,
+  and presentation rules change between episodes.
+type: space
+runtime: fastapi
+app: infinite_dom.server.app:app
+port: 8000
+tasks:
+  - id: task_1_clean_form
+    name: Clean Form
+    difficulty: easy
+    description: >
+      Baseline booking flow with clean ARIA, no distractors,
+      standard label set.
+  - id: task_2_label_drift
+    name: Label Drift
+    difficulty: medium
+    description: >
+      Same task structure as Task 1 but with randomized button and
+      field labels drawn from a synonym pool.
+  - id: task_3_structural_drift
+    name: Structural Drift
+    difficulty: hard
+    description: >
+      Label drift plus randomized layout and field order.
+  - id: task_4_full_chaos
+    name: Full Chaos
+    difficulty: expert
+    description: >
+      All variance enabled plus distractors (cookie banner, promo modals)
+      and occasionally misleading ARIA labels.
+action_space:
+  type: structured
+  fields:
+    action_type:
+      type: string
+      choices: [click, type, scroll, wait, back]
+    element_ref:
+      type: string
+    text_value:
+      type: string
+    scroll_delta:
+      type: integer
+      min: -2000
+      max: 2000
+observation_space:
+  fields:
+    a11y_tree:
+      type: string
+      description: "Accessibility tree serialized as indented text"
+    task_instruction:
+      type: string
+    task_progress:
+      type: list[string]
+    step_count:
+      type: integer

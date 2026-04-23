@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Train Booking</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  {% include '_base_styles.jinja' %}
+</head>
+<body x-data="bookingApp()">
+
+  {# ==================== Header / Navigation ==================== #}
+  {% if profile.layout == 'top_nav' %}
+    <div class="{{ profile.css_prefix }}-header" role="banner">
+      <h1>TrainBook Express</h1>
+      <nav role="navigation">
+        <a href="#" style="color:white;margin-right:1rem;">Home</a>
+        <a href="#" style="color:white;margin-right:1rem;">My Bookings</a>
+        <a href="#" style="color:white;">Help</a>
+      </nav>
+    </div>
+  {% elif profile.layout == 'sidebar_nav' %}
+    <div class="{{ profile.css_prefix }}-sidebar" role="navigation">
+      <h2>TrainBook</h2>
+      <ul>
+        <li><a href="#">Book Tickets</a></li>
+        <li><a href="#">My Bookings</a></li>
+        <li><a href="#">Help</a></li>
+      </ul>
+    </div>
+  {% elif profile.layout == 'hamburger' %}
+    <div class="{{ profile.css_prefix }}-header">
+      <button aria-label="Open menu">☰</button>
+      <span style="margin-left:1rem;">TrainBook</span>
+    </div>
+  {% else %}
+    <div style="padding:1rem 2rem;background:#111827;color:white;">
+      <h1>TrainBook</h1>
+    </div>
+  {% endif %}
+
+  {# ==================== Cookie banner distractor ==================== #}
+  {% if profile.include_cookie_banner %}
+    <div x-show="showCookieBanner" class="{{ profile.css_prefix }}-banner" role="alert">
+      <span>{{ cookie_banner_text }}</span>
+      <button
+        class="{{ profile.css_prefix }}-btn"
+        x-on:click="showCookieBanner = false"
+        aria-label="Accept cookies"
+      >Accept</button>
+    </div>
+  {% endif %}
+
+  {# ==================== Search form ==================== #}
+  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'search'" role="main">
+    <h2>Search Trains</h2>
+    <form x-on:submit.prevent="submitSearch()" role="form" aria-label="Search Trains">
+      {% for field in profile.field_order %}
+        {% if field == 'origin' %}
+          <div class="{{ profile.css_prefix }}-field">
+            <label for="{{ profile.css_prefix }}_origin">{{ profile.origin_label }}</label>
+            <input
+              id="{{ profile.css_prefix }}_origin"
+              type="text"
+              name="{{ profile.origin_label | lower | replace(' ', '_') }}"
+              x-model="form.origin"
+              aria-label="{% if profile.aria_mode == 'wrong' %}Search query{% else %}{{ profile.origin_label }}{% endif %}"
+              placeholder="Enter origin city"
+            />
+          </div>
+        {% elif field == 'destination' %}
+          <div class="{{ profile.css_prefix }}-field">
+            <label for="{{ profile.css_prefix }}_destination">{{ profile.destination_label }}</label>
+            <input
+              id="{{ profile.css_prefix }}_destination"
+              type="text"
+              name="{{ profile.destination_label | lower | replace(' ', '_') }}"
+              x-model="form.destination"
+              aria-label="{% if profile.aria_mode == 'wrong' %}Newsletter{% else %}{{ profile.destination_label }}{% endif %}"
+              placeholder="Enter destination city"
+            />
+          </div>
+        {% elif field == 'class' %}
+          <div class="{{ profile.css_prefix }}-field">
+            <label for="{{ profile.css_prefix }}_class">{{ profile.class_label }}</label>
+            <select
+              id="{{ profile.css_prefix }}_class"
+              name="{{ profile.class_label | lower | replace(' ', '_') }}"
+              x-model="form.travelClass"
+              aria-label="{{ profile.class_label }}"
+            >
+              <option value="">-- Select --</option>
+              {% for option_label in profile.class_option_labels %}
+                <option value="{{ option_label }}">{{ option_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+      {% endfor %}
+
+      <button
+        type="submit"
+        class="{{ profile.css_prefix }}-btn"
+        aria-label="{{ profile.search_button_label }}"
+      >{{ profile.search_button_label }}</button>
+    </form>
+  </div>
+
+  {# ==================== Results page ==================== #}
+  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'results'" role="main">
+    <h2>Available Trains</h2>
+    <template x-for="train in trains" :key="train.id">
+      <div class="{{ profile.css_prefix }}-results-row">
+        <div>
+          <strong x-text="train.name"></strong><br>
+          <span x-text="train.time"></span>
+        </div>
+        <button
+          class="{{ profile.css_prefix }}-btn"
+          x-on:click="selectTrain(train)"
+          x-bind:aria-label="'{{ profile.book_button_label }} ' + train.name"
+        >{{ profile.book_button_label }}</button>
+      </div>
+    </template>
+    <button x-on:click="currentPage = 'search'" style="margin-top:1rem;">Back to search</button>
+  </div>
+
+  {# ==================== Confirmation page ==================== #}
+  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'confirm'" role="main">
+    <h2>Confirm Your Booking</h2>
+    <p>Review details below and confirm.</p>
+    <ul>
+      <li>From: <span x-text="form.origin"></span></li>
+      <li>To: <span x-text="form.destination"></span></li>
+      <li>Class: <span x-text="form.travelClass"></span></li>
+      <li x-show="selectedTrain">Train: <span x-text="selectedTrain && selectedTrain.name"></span></li>
+    </ul>
+    <button
+      class="{{ profile.css_prefix }}-btn"
+      x-on:click="confirmBooking()"
+      aria-label="{{ profile.confirm_button_label }}"
+    >{{ profile.confirm_button_label }}</button>
+  </div>
+
+  {# ==================== Confirmation success ==================== #}
+  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'done'" role="main">
+    <div class="{{ profile.css_prefix }}-confirmation">
+      <h2>Booking Confirmed!</h2>
+      <p>Your booking reference:</p>
+      <p><strong x-text="bookingId"></strong></p>
+    </div>
+  </div>
+
+  {# ==================== Promo modal distractor ==================== #}
+  {% if profile.include_promo_modal %}
+    <div x-show="showPromoModal" class="{{ profile.css_prefix }}-modal-overlay">
+      <div class="{{ profile.css_prefix }}-modal">
+        <h3>{{ promo_text }}</h3>
+        <button x-on:click="showPromoModal = false" class="{{ profile.css_prefix }}-btn" aria-label="Close promo">Close</button>
+      </div>
+    </div>
+  {% endif %}
+
+  <script>
+    function bookingApp() {
+      return {
+        currentPage: 'search',
+        showCookieBanner: {{ 'true' if profile.include_cookie_banner else 'false' }},
+        showPromoModal: {{ 'true' if profile.include_promo_modal else 'false' }},
+        form: { origin: '', destination: '', travelClass: '' },
+        trains: [
+          { id: 1, name: 'Shatabdi Express', time: '06:00 – 12:30' },
+          { id: 2, name: 'Rajdhani Express', time: '20:00 – 08:15' },
+          { id: 3, name: 'Duronto Express', time: '22:30 – 10:00' },
+        ],
+        selectedTrain: null,
+        bookingId: '',
+
+        submitSearch() {
+          if (!this.form.origin || !this.form.destination || !this.form.travelClass) {
+            return;
+          }
+          history.pushState({}, '', '/results');
+          this.currentPage = 'results';
+        },
+        selectTrain(train) {
+          this.selectedTrain = train;
+          history.pushState({}, '', '/confirm');
+          this.currentPage = 'confirm';
+        },
+        confirmBooking() {
+          this.bookingId = 'PNR' + Math.floor(Math.random() * 9000000000 + 1000000000);
+          history.pushState({}, '', '/done');
+          this.currentPage = 'done';
+        },
+      };
+    }
+  </script>
+</body>
+</html>
