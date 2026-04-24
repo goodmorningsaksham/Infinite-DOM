@@ -76,15 +76,24 @@ _llm_failed = False
 SYSTEM_PROMPT = """You are a web agent navigating an interactive web application.
 You observe an accessibility tree and must complete a booking task.
 
-Respond with ONLY a JSON object (no markdown, no explanation):
-{"action_type": "click"|"type"|"scroll"|"wait", "element_ref": "btn_1"|"inp_1"|"", "text_value": "text to type"|"", "scroll_delta": 0}
+First, reason about what you see and what action to take inside <think> tags.
+Then, provide your action as a JSON object inside <answer> tags.
+
+Format:
+<think>
+[Observe the current page state. Identify which fields are filled, what buttons are available, and what the next logical step is to complete the task.]
+</think>
+<answer>
+{"action_type": "click"|"type"|"scroll"|"wait", "element_ref": "ref_id", "text_value": "text"|"", "scroll_delta": 0}
+</answer>
 
 Rules:
-- Use "type" to fill text fields (element_ref required, text_value required)
-- Use "click" to press buttons (element_ref required)
+- Use "type" to fill text fields (element_ref + text_value required)
+- Use "click" to press buttons/links (element_ref required)
 - Use "scroll" to scroll the page (scroll_delta: positive=down, negative=up)
-- Use "wait" when unsure
-- Element refs look like: inp_1, btn_2, cmb_1, lnk_3"""
+- Use "wait" when the page is loading or you need to observe
+- Element refs look like: inp_1, btn_2, cmb_1, lnk_3
+- Always dismiss cookie banners or popups before interacting with the main form"""
 
 
 def _get_llm_client():
@@ -103,9 +112,15 @@ def _get_llm_client():
 
 
 def _parse_llm_action(text: str) -> DOMAction | None:
-    """Parse LLM JSON response into a DOMAction."""
+    """Parse LLM response into a DOMAction. Supports <think>/<answer> format and raw JSON."""
     try:
         text = text.strip()
+        # Extract from <answer> tags if present (WebAgent-R1 think-then-act format)
+        if "<answer>" in text:
+            start = text.index("<answer>") + len("<answer>")
+            end = text.index("</answer>") if "</answer>" in text else len(text)
+            text = text[start:end].strip()
+        # Handle markdown code blocks
         if text.startswith("```"):
             text = text.split("```")[1]
             if text.startswith("json"):
@@ -121,6 +136,19 @@ def _parse_llm_action(text: str) -> DOMAction | None:
         return None
 
 
+_action_history_log: list[str] = []
+
+
+def _format_step_history() -> str:
+    """Compress action history into a concise context string (WebAgent-R1 style)."""
+    if not _action_history_log:
+        return ""
+    lines = ["Previous actions:"]
+    for entry in _action_history_log[-5:]:  # Last 5 steps max
+        lines.append(f"  {entry}")
+    return "\n".join(lines) + "\n\n"
+
+
 def get_action(obs, task_graph=None) -> DOMAction:
     """Get next action: try LLM first, fall back to oracle, then heuristic."""
     global _llm_failed
@@ -129,10 +157,12 @@ def get_action(obs, task_graph=None) -> DOMAction:
         client = _get_llm_client()
         if client is not None:
             try:
+                step_history = _format_step_history()
                 user_msg = (
                     f"Task: {obs.task_instruction}\n\n"
+                    f"{step_history}"
                     f"Accessibility Tree:\n{obs.a11y_tree[:3000]}\n\n"
-                    f"Progress so far: {obs.task_progress}\n"
+                    f"Completed: {obs.task_progress}\n"
                     f"Step: {obs.step_count}"
                 )
                 response = client.chat.completions.create(
@@ -141,11 +171,17 @@ def get_action(obs, task_graph=None) -> DOMAction:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_msg},
                     ],
-                    max_tokens=200,
+                    max_tokens=300,
                     temperature=0.1,
                 )
                 action = _parse_llm_action(response.choices[0].message.content)
                 if action is not None:
+                    desc = f"Step {obs.step_count}: {action.action_type.value}"
+                    if action.element_ref:
+                        desc += f" on {action.element_ref}"
+                    if action.text_value:
+                        desc += f" ('{action.text_value}')"
+                    _action_history_log.append(desc)
                     return action
             except Exception:
                 _llm_failed = True
@@ -184,6 +220,7 @@ MAX_STEPS = 25
 def run_task(task_id: int, seed: int = 42) -> None:
     task_name = TASK_NAMES.get(task_id, f"task_{task_id}")
     log_start(task_name, "infinite_dom", MODEL_NAME)
+    _action_history_log.clear()
 
     rewards: list[float] = []
     steps = 0

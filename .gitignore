@@ -1,2 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/eggs/
+build/lib/
+build/bdist.*/
+# NOTE: build/ directory with phase specs (PHASE_*.md) is NOT ignored — it's project documentation
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Env
 .env
 .env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project artifacts
+generated_pages/
+training/checkpoints/
+training/data/
+*.log
+wandb/
+runs/
+
+# Playwright
+playwright-report/
+test-results/
+.playwright/

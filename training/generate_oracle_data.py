@@ -16,7 +16,7 @@ from infinite_dom.oracle.booking_flow_oracle import oracle_policy
 OUT_DIR = Path("training/data")
 
 
-def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2)) -> None:
+def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2, 3, 4)) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUT_DIR / "oracle_trajectories.jsonl"
 
@@ -53,5 +53,6 @@ def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2)) -> None:
 
 
 if __name__ == "__main__":
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 20
-    run(num_episodes=n)
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+    tasks_arg = tuple(int(t) for t in sys.argv[2].split(",")) if len(sys.argv) > 2 else (1, 2, 3, 4)
+    run(num_episodes=n, tasks=tasks_arg)
