@@ -38,7 +38,7 @@ Thumbs.db
 # Project artifacts
 generated_pages/
 training/checkpoints/
-training/data/
+
 *.log
 wandb/
 runs/
