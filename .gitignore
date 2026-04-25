@@ -24,7 +24,7 @@ htmlcov/
 # Env
 .env
 .env.local
-
+PROJECT_KNOWLEDGE.md
 # IDE
 .vscode/
 .idea/
@@ -47,3 +47,6 @@ runs/
 playwright-report/
 test-results/
 .playwright/
+
+#claude
+.claude/
