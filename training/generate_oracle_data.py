@@ -16,7 +16,7 @@ from infinite_dom.oracle.booking_flow_oracle import oracle_policy
 OUT_DIR = Path("training/data")
 
 
-def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2, 3, 4)) -> None:
+def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUT_DIR / "oracle_trajectories.jsonl"
 
@@ -30,7 +30,7 @@ def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2, 3, 4)) -> None:
                     obs = env.reset(task_id=task_id, seed=seed)
                     instruction = obs.task_instruction
                     steps_in_ep = 0
-                    while not obs.done and steps_in_ep < 25:
+                    while not obs.done and steps_in_ep < 35:
                         action = oracle_policy(obs.a11y_tree, env._current_page.task_graph)
                         record = {
                             "task_id": task_id,
@@ -54,5 +54,5 @@ def run(num_episodes: int = 30, tasks: tuple[int, ...] = (1, 2, 3, 4)) -> None:
 
 if __name__ == "__main__":
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 30
-    tasks_arg = tuple(int(t) for t in sys.argv[2].split(",")) if len(sys.argv) > 2 else (1, 2, 3, 4)
+    tasks_arg = tuple(int(t) for t in sys.argv[2].split(",")) if len(sys.argv) > 2 else (1, 2, 3, 4, 5, 6, 7, 8)
     run(num_episodes=n, tasks=tasks_arg)

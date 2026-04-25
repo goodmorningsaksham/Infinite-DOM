@@ -129,6 +129,7 @@ class InfiniteDOMEnvironment(Environment):
                 "template_id": page.task_graph.template_id,
                 "task_id": task_id,
                 "seed": page.seed,
+                "total_nodes": len(page.task_graph.all_node_ids),
             },
         )
 

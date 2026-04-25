@@ -62,11 +62,34 @@ def grade_task_4(state: DOMState) -> float:
     return _clamp(base)
 
 
+def grade_task_5(state: DOMState) -> float:
+    return grade_generic(state)
+
+
+def grade_task_6(state: DOMState) -> float:
+    return grade_generic(state)
+
+
+def grade_task_7(state: DOMState) -> float:
+    return grade_generic(state)
+
+
+def grade_task_8(state: DOMState) -> float:
+    base = grade_generic(state)
+    if state.failed_action_count == 0 and len(state.task_graph_completed) > 0:
+        base += 0.05
+    return _clamp(base)
+
+
 GRADERS = {
     1: grade_task_1,
     2: grade_task_2,
     3: grade_task_3,
     4: grade_task_4,
+    5: grade_task_5,
+    6: grade_task_6,
+    7: grade_task_7,
+    8: grade_task_8,
 }
 
 

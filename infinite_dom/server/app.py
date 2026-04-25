@@ -42,10 +42,14 @@ app.add_middleware(
 )
 
 TASK_DESCRIPTIONS = {
-    1: "Clean booking form — standard labels, no distractors",
-    2: "Label drift — randomised field labels and button text",
-    3: "Structural drift — randomised layout and field order",
-    4: "Full chaos — distractors, noisy ARIA, everything randomised",
+    1: "Booking: clean form — standard labels, no distractors",
+    2: "Booking: label drift — randomised labels + form validation",
+    3: "Booking: structural drift — shuffled fields, conditional round-trip, train selection",
+    4: "Booking: full chaos — distractors, noisy ARIA, fake buttons, 7 trains",
+    5: "E-commerce: clean store — search, filter, cart, checkout",
+    6: "E-commerce: label drift — randomised labels + checkout validation",
+    7: "E-commerce: structural drift — layout changes, more distractors, more products",
+    8: "E-commerce: full chaos — newsletter popups, fake buttons, noisy ARIA",
 }
 
 _DASHBOARD_HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")

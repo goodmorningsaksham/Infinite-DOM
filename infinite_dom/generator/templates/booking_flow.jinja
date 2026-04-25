@@ -10,7 +10,7 @@
 
   {# ==================== Header / Navigation ==================== #}
   {% if profile.layout == 'top_nav' %}
-    <div class="{{ profile.css_prefix }}-header" role="banner">
+    <div class="{{ p }}-header" role="banner">
       <h1>TrainBook Express</h1>
       <nav role="navigation">
         <a href="#" style="color:white;margin-right:1rem;">Home</a>
@@ -19,7 +19,7 @@
       </nav>
     </div>
   {% elif profile.layout == 'sidebar_nav' %}
-    <div class="{{ profile.css_prefix }}-sidebar" role="navigation">
+    <div class="{{ p }}-sidebar" role="navigation">
       <h2>TrainBook</h2>
       <ul>
         <li><a href="#">Book Tickets</a></li>
@@ -28,8 +28,8 @@
       </ul>
     </div>
   {% elif profile.layout == 'hamburger' %}
-    <div class="{{ profile.css_prefix }}-header">
-      <button aria-label="Open menu">☰</button>
+    <div class="{{ p }}-header">
+      <button aria-label="Open menu">&#9776;</button>
       <span style="margin-left:1rem;">TrainBook</span>
     </div>
   {% else %}
@@ -40,53 +40,81 @@
 
   {# ==================== Cookie banner distractor ==================== #}
   {% if profile.include_cookie_banner %}
-    <div x-show="showCookieBanner" class="{{ profile.css_prefix }}-banner" role="alert">
-      <span>{{ cookie_banner_text }}</span>
+    <div x-show="showCookieBanner" class="{{ p }}-banner" role="alert">
+      <span>{{ profile.cookie_banner_text }}</span>
       <button
-        class="{{ profile.css_prefix }}-btn"
+        class="{{ p }}-btn-secondary"
         x-on:click="showCookieBanner = false"
         aria-label="Accept cookies"
       >Accept</button>
     </div>
   {% endif %}
 
-  {# ==================== Search form ==================== #}
-  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'search'" role="main">
+  {# ==================== Newsletter popup distractor ==================== #}
+  {% if profile.include_newsletter_popup %}
+    <div x-show="showNewsletter" class="{{ p }}-modal-overlay" style="z-index:90;">
+      <div class="{{ p }}-modal">
+        <h3>{{ profile.newsletter_text }}</h3>
+        <input type="email" placeholder="your@email.com"
+          aria-label="{% if profile.aria_mode == 'noisy' %}Destination email{% else %}Newsletter email{% endif %}"
+          style="width:100%;padding:.5rem;margin:.75rem 0;border:1px solid #d1d5db;border-radius:6px;" />
+        <div style="display:flex;gap:.5rem;">
+          <button class="{{ p }}-btn" x-on:click="showNewsletter = false"
+            aria-label="Subscribe newsletter">Subscribe</button>
+          <button class="{{ p }}-btn-secondary" x-on:click="showNewsletter = false"
+            aria-label="Close newsletter">No Thanks</button>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ==================== SEARCH PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'search'" role="main">
     <h2>Search Trains</h2>
+
+    {# Validation errors #}
+    {% if profile.enable_validation %}
+    <div x-show="errors.length > 0" class="{{ p }}-errors" role="alert" aria-live="assertive">
+      <template x-for="err in errors" :key="err">
+        <p x-text="err"></p>
+      </template>
+    </div>
+    {% endif %}
+
     <form x-on:submit.prevent="submitSearch()" role="form" aria-label="Search Trains">
       {% for field in profile.field_order %}
         {% if field == 'origin' %}
-          <div class="{{ profile.css_prefix }}-field">
-            <label for="{{ profile.css_prefix }}_origin">{{ profile.origin_label }}</label>
+          <div class="{{ p }}-field">
+            <label for="{{ p }}_origin">{{ profile.origin_label }}</label>
             <input
-              id="{{ profile.css_prefix }}_origin"
+              id="{{ p }}_origin"
               type="text"
               name="{{ profile.origin_label | lower | replace(' ', '_') }}"
               x-model="form.origin"
-              aria-label="{% if profile.aria_mode == 'wrong' %}Search query{% else %}{{ profile.origin_label }}{% endif %}"
+              aria-label="{% if profile.aria_mode == 'wrong' %}Search query{% elif profile.aria_mode == 'noisy' %}Input field 1{% else %}{{ profile.origin_label }}{% endif %}"
               placeholder="Enter origin city"
             />
           </div>
         {% elif field == 'destination' %}
-          <div class="{{ profile.css_prefix }}-field">
-            <label for="{{ profile.css_prefix }}_destination">{{ profile.destination_label }}</label>
+          <div class="{{ p }}-field">
+            <label for="{{ p }}_destination">{{ profile.destination_label }}</label>
             <input
-              id="{{ profile.css_prefix }}_destination"
+              id="{{ p }}_destination"
               type="text"
               name="{{ profile.destination_label | lower | replace(' ', '_') }}"
               x-model="form.destination"
-              aria-label="{% if profile.aria_mode == 'wrong' %}Newsletter{% else %}{{ profile.destination_label }}{% endif %}"
+              aria-label="{% if profile.aria_mode == 'wrong' %}Newsletter{% elif profile.aria_mode == 'noisy' %}Input field 2{% else %}{{ profile.destination_label }}{% endif %}"
               placeholder="Enter destination city"
             />
           </div>
         {% elif field == 'class' %}
-          <div class="{{ profile.css_prefix }}-field">
-            <label for="{{ profile.css_prefix }}_class">{{ profile.class_label }}</label>
+          <div class="{{ p }}-field">
+            <label for="{{ p }}_class">{{ profile.class_label }}</label>
             <select
-              id="{{ profile.css_prefix }}_class"
+              id="{{ p }}_class"
               name="{{ profile.class_label | lower | replace(' ', '_') }}"
               x-model="form.travelClass"
-              aria-label="{{ profile.class_label }}"
+              aria-label="{% if profile.aria_mode == 'wrong' %}Sort order{% elif profile.aria_mode == 'noisy' %}Dropdown selection{% else %}{{ profile.class_label }}{% endif %}"
             >
               <option value="">-- Select --</option>
               {% for option_label in profile.class_option_labels %}
@@ -94,68 +122,166 @@
               {% endfor %}
             </select>
           </div>
+        {% elif field == 'trip_type' %}
+          <div class="{{ p }}-field">
+            <label for="{{ p }}_trip_type">{{ profile.trip_type_label }}</label>
+            <select
+              id="{{ p }}_trip_type"
+              name="{{ profile.trip_type_label | lower | replace(' ', '_') }}"
+              x-model="form.tripType"
+              aria-label="{{ profile.trip_type_label }}"
+            >
+              <option value="one_way">One Way</option>
+              <option value="round_trip">Round Trip</option>
+            </select>
+          </div>
+        {% elif field == 'return_date' %}
+          <div class="{{ p }}-field" x-show="form.tripType === 'round_trip'">
+            <label for="{{ p }}_return_date">{{ profile.return_date_label }}</label>
+            <input
+              id="{{ p }}_return_date"
+              type="text"
+              name="{{ profile.return_date_label | lower | replace(' ', '_') }}"
+              x-model="form.returnDate"
+              aria-label="{{ profile.return_date_label }}"
+              placeholder="e.g. 15 Mar"
+            />
+          </div>
         {% endif %}
       {% endfor %}
 
+      {# Fake distractor button near search #}
+      {% if profile.include_fake_buttons %}
+      <button type="button" onclick="void(0)"
+        class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}Search trains{% else %}Search deals{% endif %}"
+      >Search Deals</button>
+      {% endif %}
+
       <button
         type="submit"
-        class="{{ profile.css_prefix }}-btn"
+        class="{{ p }}-btn"
         aria-label="{{ profile.search_button_label }}"
       >{{ profile.search_button_label }}</button>
     </form>
+
+    {# Ad banner distractor on search page #}
+    {% if profile.distractor_ad_text %}
+    <div class="{{ p }}-ad-banner">
+      <span>{{ profile.distractor_ad_text }}</span>
+      <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}Book now{% else %}Claim offer{% endif %}"
+      >Claim Offer</button>
+    </div>
+    {% endif %}
   </div>
 
-  {# ==================== Results page ==================== #}
-  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'results'" role="main">
+  {# ==================== RESULTS PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'results'" role="main">
     <h2>Available Trains</h2>
+    <p>Found <span x-text="trains.length"></span> trains from
+      <strong x-text="form.origin"></strong> to <strong x-text="form.destination"></strong></p>
+
     <template x-for="train in trains" :key="train.id">
-      <div class="{{ profile.css_prefix }}-results-row">
-        <div>
+      <div class="{{ p }}-results-row">
+        <div style="flex:1;">
           <strong x-text="train.name"></strong><br>
-          <span x-text="train.time"></span>
+          <span x-text="train.time" style="color:#6b7280;font-size:.9rem;"></span>
+        </div>
+        <div style="text-align:right;margin-right:1rem;">
+          <span x-text="'₹' + train.price" style="font-weight:600;"></span>
         </div>
         <button
-          class="{{ profile.css_prefix }}-btn"
+          class="{{ p }}-btn"
           x-on:click="selectTrain(train)"
           x-bind:aria-label="'{{ profile.book_button_label }} ' + train.name"
         >{{ profile.book_button_label }}</button>
       </div>
     </template>
-    <button x-on:click="currentPage = 'search'" style="margin-top:1rem;">Back to search</button>
+
+    {# Fake sponsored train result #}
+    {% if profile.include_fake_buttons %}
+    <div class="{{ p }}-results-row" style="background:#fffbeb;border:1px dashed #f59e0b;border-radius:8px;padding:1rem;margin-top:.5rem;">
+      <div style="flex:1;">
+        <strong>Premium Superfast Express</strong> <span style="color:#f59e0b;font-size:.75rem;">SPONSORED</span><br>
+        <span style="color:#6b7280;font-size:.9rem;">Flexible timings</span>
+      </div>
+      <div style="text-align:right;margin-right:1rem;">
+        <span style="font-weight:600;">&#8377;4999</span>
+      </div>
+      <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.book_button_label }} Premium Superfast Express{% else %}Sponsored booking{% endif %}"
+      >{{ profile.book_button_label }}</button>
+    </div>
+    {% endif %}
+
+    <button x-on:click="currentPage = 'search'" class="{{ p }}-btn-secondary" style="margin-top:1rem;">Back to search</button>
   </div>
 
-  {# ==================== Confirmation page ==================== #}
-  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'confirm'" role="main">
+  {# ==================== CONFIRM PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'confirm'" role="main">
     <h2>Confirm Your Booking</h2>
     <p>Review details below and confirm.</p>
-    <ul>
-      <li>From: <span x-text="form.origin"></span></li>
-      <li>To: <span x-text="form.destination"></span></li>
-      <li>Class: <span x-text="form.travelClass"></span></li>
-      <li x-show="selectedTrain">Train: <span x-text="selectedTrain && selectedTrain.name"></span></li>
+    <ul style="list-style:none;padding:0;">
+      <li style="padding:.4rem 0;">From: <strong x-text="form.origin"></strong></li>
+      <li style="padding:.4rem 0;">To: <strong x-text="form.destination"></strong></li>
+      <li style="padding:.4rem 0;">Class: <strong x-text="form.travelClass"></strong></li>
+      <li x-show="selectedTrain" style="padding:.4rem 0;">Train: <strong x-text="selectedTrain && selectedTrain.name"></strong></li>
+      <li x-show="selectedTrain" style="padding:.4rem 0;">Departure: <strong x-text="selectedTrain && selectedTrain.time"></strong></li>
+      <li x-show="selectedTrain" style="padding:.4rem 0;">Price: <strong x-text="selectedTrain ? '₹' + selectedTrain.price : ''"></strong></li>
+      <li x-show="form.tripType === 'round_trip'" style="padding:.4rem 0;">Return: <strong x-text="form.returnDate"></strong></li>
     </ul>
+
+    {% if profile.include_fake_buttons %}
+    <div style="display:flex;gap:.75rem;margin-top:1rem;">
+      <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.confirm_button_label }}{% else %}Cancel booking{% endif %}"
+      >Cancel &amp; Rebook</button>
+      <button
+        class="{{ p }}-btn"
+        x-on:click="confirmBooking()"
+        aria-label="{{ profile.confirm_button_label }}"
+      >{{ profile.confirm_button_label }}</button>
+    </div>
+    {% else %}
     <button
-      class="{{ profile.css_prefix }}-btn"
+      class="{{ p }}-btn"
       x-on:click="confirmBooking()"
       aria-label="{{ profile.confirm_button_label }}"
+      style="margin-top:1rem;"
     >{{ profile.confirm_button_label }}</button>
+    {% endif %}
   </div>
 
-  {# ==================== Confirmation success ==================== #}
-  <div class="{{ profile.css_prefix }}-container" x-show="currentPage === 'done'" role="main">
-    <div class="{{ profile.css_prefix }}-confirmation">
+  {# ==================== DONE PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'done'" role="main">
+    <div class="{{ p }}-confirmation">
       <h2>Booking Confirmed!</h2>
       <p>Your booking reference:</p>
       <p><strong x-text="bookingId"></strong></p>
+      <p x-show="selectedTrain" style="margin-top:.5rem;">
+        Train: <span x-text="selectedTrain && selectedTrain.name"></span>
+      </p>
     </div>
   </div>
 
   {# ==================== Promo modal distractor ==================== #}
   {% if profile.include_promo_modal %}
-    <div x-show="showPromoModal" class="{{ profile.css_prefix }}-modal-overlay">
-      <div class="{{ profile.css_prefix }}-modal">
-        <h3>{{ promo_text }}</h3>
-        <button x-on:click="showPromoModal = false" class="{{ profile.css_prefix }}-btn" aria-label="Close promo">Close</button>
+    <div x-show="showPromoModal" class="{{ p }}-modal-overlay">
+      <div class="{{ p }}-modal">
+        <h3>{{ profile.promo_text }}</h3>
+        {% if profile.include_fake_buttons %}
+        <div style="display:flex;gap:.5rem;">
+          <button x-on:click="showPromoModal = false" class="{{ p }}-btn"
+            aria-label="{% if profile.aria_mode == 'noisy' %}Confirm booking{% else %}Grab deal{% endif %}"
+          >Grab Deal</button>
+          <button x-on:click="showPromoModal = false" class="{{ p }}-btn-secondary"
+            aria-label="Close promo">Close</button>
+        </div>
+        {% else %}
+        <button x-on:click="showPromoModal = false" class="{{ p }}-btn"
+          aria-label="Close promo">Close</button>
+        {% endif %}
       </div>
     </div>
   {% endif %}
@@ -166,27 +292,54 @@
         currentPage: 'search',
         showCookieBanner: {{ 'true' if profile.include_cookie_banner else 'false' }},
         showPromoModal: {{ 'true' if profile.include_promo_modal else 'false' }},
-        form: { origin: '', destination: '', travelClass: '' },
-        trains: [
-          { id: 1, name: 'Shatabdi Express', time: '06:00 – 12:30' },
-          { id: 2, name: 'Rajdhani Express', time: '20:00 – 08:15' },
-          { id: 3, name: 'Duronto Express', time: '22:30 – 10:00' },
-        ],
+        showNewsletter: {{ 'true' if profile.include_newsletter_popup else 'false' }},
+        form: {
+          origin: '',
+          destination: '',
+          travelClass: '',
+          tripType: '{{ profile.trip_type }}',
+          returnDate: '',
+        },
+        errors: [],
+        trains: {{ trains_json|safe }},
         selectedTrain: null,
         bookingId: '',
 
         submitSearch() {
+          this.errors = [];
+          {% if profile.enable_validation %}
+          if (!this.form.origin.trim()) {
+            this.errors.push('{{ profile.validation_msg_origin }}');
+          }
+          if (!this.form.destination.trim()) {
+            this.errors.push('{{ profile.validation_msg_destination }}');
+          }
+          if (!this.form.travelClass) {
+            this.errors.push('{{ profile.validation_msg_class }}');
+          }
+          if (this.form.origin.trim().toLowerCase() === this.form.destination.trim().toLowerCase()
+              && this.form.origin.trim() !== '') {
+            this.errors.push('{{ profile.validation_msg_same_city }}');
+          }
+          if (this.form.tripType === 'round_trip' && !this.form.returnDate.trim()) {
+            this.errors.push('{{ profile.validation_msg_return_date }}');
+          }
+          if (this.errors.length > 0) return;
+          {% else %}
           if (!this.form.origin || !this.form.destination || !this.form.travelClass) {
             return;
           }
+          {% endif %}
           history.pushState({}, '', '/results');
           this.currentPage = 'results';
         },
+
         selectTrain(train) {
           this.selectedTrain = train;
           history.pushState({}, '', '/confirm');
           this.currentPage = 'confirm';
         },
+
         confirmBooking() {
           this.bookingId = 'PNR' + Math.floor(Math.random() * 9000000000 + 1000000000);
           history.pushState({}, '', '/done');

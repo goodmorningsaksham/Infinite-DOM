@@ -105,7 +105,7 @@ class DOMState(State):
 
     Do not redeclare those here.
     """
-    task_id: int = Field(description="Curriculum task (1–4).")
+    task_id: int = Field(description="Curriculum task (1–8).")
     template_id: str = Field(description="Which archetype template generated this episode.")
     seed: int = Field(description="Random seed used for generation.")
     task_graph_completed: list[str] = Field(default_factory=list)

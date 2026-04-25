@@ -228,6 +228,39 @@ class PlaywrightDriver:
             }"""
         )
 
+        ecommerce = await self._page.evaluate(
+            """() => {
+                const text = document.body.innerText || '';
+                const lower = text.toLowerCase();
+                const orderMatch = text.match(/ORD\\d{6,}/i);
+                const cartItems = [];
+                document.querySelectorAll('[x-for*="cart"]').forEach(() => {});
+                const alpineEl = document.querySelector('[x-data]');
+                if (alpineEl && alpineEl._x_dataStack) {
+                    const data = alpineEl._x_dataStack[0];
+                    if (data && data.cart) {
+                        data.cart.forEach(item => cartItems.push(item.name || ''));
+                    }
+                }
+                return {
+                    cart_items: cartItems,
+                    order_id: orderMatch ? orderMatch[0] : null,
+                    order_confirmed: lower.includes('order confirmed') || lower.includes('order placed') || !!orderMatch,
+                };
+            }"""
+        )
+
+        error_messages = await self._page.evaluate(
+            """() => {
+                const errors = [];
+                document.querySelectorAll('[role="alert"] p, .errors p').forEach(el => {
+                    const txt = el.textContent.trim();
+                    if (txt) errors.push(txt);
+                });
+                return errors;
+            }"""
+        )
+
         return {
             "inputs": inputs or {},
             "selected_options": selected or {},
@@ -235,6 +268,9 @@ class PlaywrightDriver:
             "url": self._page.url,
             "confirmation_visible": confirmation.get("visible", False),
             "booking_id_visible": confirmation.get("booking_id"),
+            "cart_items": ecommerce.get("cart_items", []),
+            "order_id_visible": ecommerce.get("order_id"),
+            "error_messages": error_messages or [],
         }
 
     async def execute(self, action: DOMAction, timeout_s: float = 10.0) -> bool:

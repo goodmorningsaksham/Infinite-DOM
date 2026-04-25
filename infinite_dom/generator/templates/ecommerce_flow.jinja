@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ShopMart Online</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  {% include '_base_styles.jinja' %}
+</head>
+<body x-data="shopApp()">
+
+  {# ==================== Header / Navigation ==================== #}
+  {% if profile.layout == 'top_nav' %}
+    <div class="{{ p }}-header" role="banner">
+      <h1>ShopMart</h1>
+      <nav role="navigation" style="display:flex;gap:1rem;">
+        <a href="#" style="color:white;">Home</a>
+        <a href="#" style="color:white;">Categories</a>
+        <a href="#" style="color:white;">
+          Cart (<span x-text="cart.length"></span>)
+        </a>
+        <a href="#" style="color:white;">Account</a>
+      </nav>
+    </div>
+  {% elif profile.layout == 'sidebar_nav' %}
+    <div class="{{ p }}-sidebar" role="navigation">
+      <h2>ShopMart</h2>
+      <ul>
+        <li><a href="#">Home</a></li>
+        <li><a href="#">Categories</a></li>
+        <li><a href="#">Cart</a></li>
+        <li><a href="#">Orders</a></li>
+      </ul>
+    </div>
+  {% elif profile.layout == 'hamburger' %}
+    <div class="{{ p }}-header">
+      <button aria-label="Open menu">&#9776;</button>
+      <span style="margin-left:1rem;">ShopMart</span>
+      <span style="margin-left:auto;">Cart (<span x-text="cart.length"></span>)</span>
+    </div>
+  {% else %}
+    <div style="padding:1rem 2rem;background:#111827;color:white;display:flex;justify-content:space-between;">
+      <h1 style="margin:0;">ShopMart</h1>
+      <span>Cart (<span x-text="cart.length"></span>)</span>
+    </div>
+  {% endif %}
+
+  {# ==================== Cookie banner ==================== #}
+  {% if profile.include_cookie_banner %}
+    <div x-show="showCookieBanner" class="{{ p }}-banner" role="alert">
+      <span>{{ profile.cookie_banner_text }}</span>
+      <button class="{{ p }}-btn-secondary" x-on:click="showCookieBanner = false"
+        aria-label="Accept cookies">Accept</button>
+    </div>
+  {% endif %}
+
+  {# ==================== Newsletter popup ==================== #}
+  {% if profile.include_newsletter_popup %}
+    <div x-show="showNewsletter" class="{{ p }}-modal-overlay" style="z-index:90;">
+      <div class="{{ p }}-modal">
+        <h3>{{ profile.newsletter_text }}</h3>
+        <input type="email" placeholder="your@email.com"
+          aria-label="{% if profile.aria_mode == 'noisy' %}Search products{% else %}Newsletter email{% endif %}"
+          style="width:100%;padding:.5rem;margin:.75rem 0;border:1px solid #d1d5db;border-radius:6px;" />
+        <div style="display:flex;gap:.5rem;">
+          <button class="{{ p }}-btn" x-on:click="showNewsletter = false"
+            aria-label="Subscribe newsletter">Subscribe</button>
+          <button class="{{ p }}-btn-secondary" x-on:click="showNewsletter = false"
+            aria-label="Close newsletter">No Thanks</button>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ==================== SEARCH PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'search'" role="main">
+    <h2>Find Products</h2>
+
+    {% if profile.enable_validation %}
+    <div x-show="errors.length > 0" class="{{ p }}-errors" role="alert" aria-live="assertive">
+      <template x-for="err in errors" :key="err">
+        <p x-text="err"></p>
+      </template>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label for="{{ p }}_search" style="font-weight:600;display:block;margin-bottom:.4rem;">{{ profile.ecom_search_label }}</label>
+        <input
+          id="{{ p }}_search"
+          type="text"
+          name="{{ profile.ecom_search_label | lower | replace(' ', '_') }}"
+          x-model="searchQuery"
+          aria-label="{% if profile.aria_mode == 'wrong' %}Enter city{% elif profile.aria_mode == 'noisy' %}Text input{% else %}{{ profile.ecom_search_label }}{% endif %}"
+          placeholder="{{ profile.ecom_search_label }}"
+          style="width:100%;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;font-size:1rem;box-sizing:border-box;"
+        />
+      </div>
+      <div style="min-width:180px;">
+        <label for="{{ p }}_category" style="font-weight:600;display:block;margin-bottom:.4rem;">{{ profile.ecom_category_label }}</label>
+        <select
+          id="{{ p }}_category"
+          name="{{ profile.ecom_category_label | lower | replace(' ', '_') }}"
+          x-model="selectedCategory"
+          aria-label="{% if profile.aria_mode == 'wrong' %}Travel class{% elif profile.aria_mode == 'noisy' %}Filter dropdown{% else %}{{ profile.ecom_category_label }}{% endif %}"
+          style="width:100%;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;font-size:1rem;"
+        >
+          <option value="">All Categories</option>
+          {% for cat in categories %}
+            <option value="{{ cat }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <button class="{{ p }}-btn" x-on:click="applyFilter()"
+          aria-label="Apply filter">Filter</button>
+      </div>
+    </div>
+
+    {# Distractor ad #}
+    {% if profile.distractor_ad_text %}
+    <div class="{{ p }}-ad-banner" style="margin-bottom:1rem;">
+      <span>{{ profile.distractor_ad_text }}</span>
+      <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_add_cart_label }}{% else %}Claim offer{% endif %}"
+      >Shop Now</button>
+    </div>
+    {% endif %}
+
+    <div x-show="filteredProducts.length > 0">
+      <p style="color:#6b7280;margin-bottom:1rem;">
+        Showing <span x-text="filteredProducts.length"></span> products
+        <span x-show="selectedCategory"> in <strong x-text="selectedCategory"></strong></span>
+      </p>
+
+      <template x-for="product in filteredProducts" :key="product.id">
+        <div class="{{ p }}-product-card">
+          <div style="flex:1;">
+            <strong x-text="product.name"></strong><br>
+            <span class="{{ p }}-price-sale" x-text="'&#8377;' + product.price"></span>
+            <span class="{{ p }}-price-mrp" x-text="'&#8377;' + product.mrp"></span>
+          </div>
+          <button class="{{ p }}-btn" x-on:click="viewProduct(product)"
+            x-bind:aria-label="'View ' + product.name">View</button>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="filteredProducts.length === 0 && selectedCategory" style="padding:2rem;text-align:center;color:#6b7280;">
+      <p>No products found. Try a different category.</p>
+    </div>
+
+    {% if profile.include_fake_buttons %}
+    <div style="margin-top:1rem;padding:1rem;background:#f3f4f6;border-radius:8px;">
+      <p style="font-size:.85rem;color:#6b7280;">Recommended for you</p>
+      <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+        aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_add_cart_label }}{% else %}View recommended{% endif %}"
+      >View Deals</button>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ==================== PRODUCT DETAIL PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'product'" role="main">
+    <button x-on:click="currentPage = 'search'" class="{{ p }}-btn-secondary" style="margin-bottom:1rem;">
+      &larr; Back to results
+    </button>
+
+    <div x-show="viewingProduct">
+      <h2 x-text="viewingProduct && viewingProduct.name"></h2>
+      <div style="margin:1rem 0;">
+        <span class="{{ p }}-price-sale" style="font-size:1.5rem;" x-text="viewingProduct ? '&#8377;' + viewingProduct.price : ''"></span>
+        <span class="{{ p }}-price-mrp" style="font-size:1.1rem;" x-text="viewingProduct ? '&#8377;' + viewingProduct.mrp : ''"></span>
+        <span x-show="viewingProduct" style="color:#16a34a;margin-left:.5rem;font-size:.9rem;"
+          x-text="viewingProduct ? Math.round((1 - viewingProduct.price/viewingProduct.mrp)*100) + '% off' : ''"></span>
+      </div>
+      <p style="color:#6b7280;">In stock. Ships within 2-3 business days.</p>
+
+      {% if profile.include_fake_buttons %}
+      <div style="display:flex;gap:.75rem;margin-top:1.5rem;flex-wrap:wrap;">
+        <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+          aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_add_cart_label }}{% else %}Add to wishlist{% endif %}"
+        >Add to Wishlist</button>
+        <button class="{{ p }}-btn" x-on:click="addToCart()"
+          aria-label="{{ profile.ecom_add_cart_label }}">{{ profile.ecom_add_cart_label }}</button>
+        <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+          aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_add_cart_label }} express{% else %}Compare products{% endif %}"
+        >Compare</button>
+      </div>
+      {% else %}
+      <button class="{{ p }}-btn" x-on:click="addToCart()" style="margin-top:1.5rem;"
+        aria-label="{{ profile.ecom_add_cart_label }}">{{ profile.ecom_add_cart_label }}</button>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ==================== CART PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'cart'" role="main">
+    <h2>Your Cart</h2>
+
+    <template x-for="item in cart" :key="item.id">
+      <div class="{{ p }}-product-card">
+        <div style="flex:1;">
+          <strong x-text="item.name"></strong><br>
+          <span class="{{ p }}-price-sale" x-text="'&#8377;' + item.price"></span>
+        </div>
+        <button class="{{ p }}-btn-secondary" x-on:click="removeFromCart(item)"
+          aria-label="Remove item">Remove</button>
+      </div>
+    </template>
+
+    <div x-show="cart.length === 0" style="padding:2rem;text-align:center;color:#6b7280;">
+      <p>Your cart is empty.</p>
+      <button class="{{ p }}-btn" x-on:click="currentPage = 'search'">Continue Shopping</button>
+    </div>
+
+    <div x-show="cart.length > 0" class="{{ p }}-cart-summary">
+      <p>Total: <strong x-text="'&#8377;' + cartTotal()"></strong></p>
+      <button class="{{ p }}-btn" x-on:click="goToCheckout()" style="margin-top:.75rem;"
+        aria-label="{{ profile.ecom_checkout_label }}">{{ profile.ecom_checkout_label }}</button>
+    </div>
+  </div>
+
+  {# ==================== CHECKOUT PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'checkout'" role="main">
+    <h2>Shipping Details</h2>
+
+    {% if profile.enable_validation %}
+    <div x-show="errors.length > 0" class="{{ p }}-errors" role="alert" aria-live="assertive">
+      <template x-for="err in errors" :key="err">
+        <p x-text="err"></p>
+      </template>
+    </div>
+    {% endif %}
+
+    <form x-on:submit.prevent="placeOrder()" role="form" aria-label="Checkout form">
+      <div class="{{ p }}-field">
+        <label for="{{ p }}_name">{{ profile.ecom_name_label }}</label>
+        <input id="{{ p }}_name" type="text"
+          name="{{ profile.ecom_name_label | lower | replace(' ', '_') }}"
+          x-model="shipping.name"
+          aria-label="{% if profile.aria_mode == 'wrong' %}Search{% elif profile.aria_mode == 'noisy' %}Text field{% else %}{{ profile.ecom_name_label }}{% endif %}"
+          placeholder="{{ profile.ecom_name_label }}" />
+      </div>
+      <div class="{{ p }}-field">
+        <label for="{{ p }}_address">{{ profile.ecom_address_label }}</label>
+        <input id="{{ p }}_address" type="text"
+          name="{{ profile.ecom_address_label | lower | replace(' ', '_') }}"
+          x-model="shipping.address"
+          aria-label="{% if profile.aria_mode == 'wrong' %}Destination{% elif profile.aria_mode == 'noisy' %}Address input{% else %}{{ profile.ecom_address_label }}{% endif %}"
+          placeholder="{{ profile.ecom_address_label }}" />
+      </div>
+      <div style="display:flex;gap:1rem;">
+        <div class="{{ p }}-field" style="flex:1;">
+          <label for="{{ p }}_city">{{ profile.ecom_city_label }}</label>
+          <input id="{{ p }}_city" type="text"
+            name="{{ profile.ecom_city_label | lower | replace(' ', '_') }}"
+            x-model="shipping.city"
+            aria-label="{{ profile.ecom_city_label }}"
+            placeholder="{{ profile.ecom_city_label }}" />
+        </div>
+        <div class="{{ p }}-field" style="flex:1;">
+          <label for="{{ p }}_pin">{{ profile.ecom_pin_label }}</label>
+          <input id="{{ p }}_pin" type="text"
+            name="{{ profile.ecom_pin_label | lower | replace(' ', '_') }}"
+            x-model="shipping.pin"
+            aria-label="{{ profile.ecom_pin_label }}"
+            placeholder="{{ profile.ecom_pin_label }}" />
+        </div>
+      </div>
+      <div class="{{ p }}-field">
+        <label for="{{ p }}_phone">{{ profile.ecom_phone_label }}</label>
+        <input id="{{ p }}_phone" type="text"
+          name="{{ profile.ecom_phone_label | lower | replace(' ', '_') }}"
+          x-model="shipping.phone"
+          aria-label="{% if profile.aria_mode == 'wrong' %}Order number{% elif profile.aria_mode == 'noisy' %}Phone input{% else %}{{ profile.ecom_phone_label }}{% endif %}"
+          placeholder="{{ profile.ecom_phone_label }}" />
+      </div>
+
+      {% if profile.include_fake_buttons %}
+      <div style="display:flex;gap:.75rem;margin-top:1rem;">
+        <button type="button" onclick="void(0)" class="{{ p }}-btn-fake"
+          aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_confirm_label }}{% else %}Save for later{% endif %}"
+        >Save for Later</button>
+        <button type="submit" class="{{ p }}-btn"
+          aria-label="{{ profile.ecom_confirm_label }}">{{ profile.ecom_confirm_label }}</button>
+      </div>
+      {% else %}
+      <button type="submit" class="{{ p }}-btn" style="margin-top:1rem;"
+        aria-label="{{ profile.ecom_confirm_label }}">{{ profile.ecom_confirm_label }}</button>
+      {% endif %}
+    </form>
+  </div>
+
+  {# ==================== ORDER CONFIRMED PAGE ==================== #}
+  <div class="{{ p }}-container" x-show="currentPage === 'confirmed'" role="main">
+    <div class="{{ p }}-order-confirmed">
+      <h2>Order Confirmed!</h2>
+      <p>Your order ID:</p>
+      <p><strong x-text="orderId" style="font-size:1.3rem;"></strong></p>
+      <p style="margin-top:1rem;color:#6b7280;">
+        Delivering to <span x-text="shipping.name"></span>,
+        <span x-text="shipping.address"></span>,
+        <span x-text="shipping.city"></span> - <span x-text="shipping.pin"></span>
+      </p>
+    </div>
+  </div>
+
+  {# ==================== Promo modal ==================== #}
+  {% if profile.include_promo_modal %}
+    <div x-show="showPromoModal" class="{{ p }}-modal-overlay">
+      <div class="{{ p }}-modal">
+        <h3>{{ profile.promo_text }}</h3>
+        {% if profile.include_fake_buttons %}
+        <div style="display:flex;gap:.5rem;">
+          <button x-on:click="showPromoModal = false" class="{{ p }}-btn"
+            aria-label="{% if profile.aria_mode == 'noisy' %}{{ profile.ecom_confirm_label }}{% else %}Grab deal{% endif %}"
+          >Grab Deal</button>
+          <button x-on:click="showPromoModal = false" class="{{ p }}-btn-secondary"
+            aria-label="Close promo">Close</button>
+        </div>
+        {% else %}
+        <button x-on:click="showPromoModal = false" class="{{ p }}-btn"
+          aria-label="Close promo">Close</button>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <script>
+    function shopApp() {
+      const allProducts = {{ products_json|safe }};
+      const distractorProducts = {{ distractor_json|safe }};
+      const targetCategory = '{{ profile.target_category }}';
+
+      return {
+        currentPage: 'search',
+        showCookieBanner: {{ 'true' if profile.include_cookie_banner else 'false' }},
+        showPromoModal: {{ 'true' if profile.include_promo_modal else 'false' }},
+        showNewsletter: {{ 'true' if profile.include_newsletter_popup else 'false' }},
+        searchQuery: '',
+        selectedCategory: '',
+        filteredProducts: [...allProducts, ...distractorProducts],
+        viewingProduct: null,
+        cart: [],
+        shipping: { name: '', address: '', city: '', pin: '', phone: '' },
+        orderId: '',
+        errors: [],
+        addedToCartMsg: false,
+
+        applyFilter() {
+          let results = [...allProducts];
+          if (this.selectedCategory) {
+            if (this.selectedCategory === targetCategory) {
+              results = [...allProducts];
+            } else {
+              results = [...distractorProducts];
+            }
+          }
+          if (this.searchQuery.trim()) {
+            const q = this.searchQuery.trim().toLowerCase();
+            results = results.filter(p => p.name.toLowerCase().includes(q));
+          }
+          this.filteredProducts = results;
+          history.pushState({}, '', '/products');
+        },
+
+        viewProduct(product) {
+          this.viewingProduct = product;
+          history.pushState({}, '', '/product/' + product.id);
+          this.currentPage = 'product';
+        },
+
+        addToCart() {
+          if (this.viewingProduct && !this.cart.find(c => c.id === this.viewingProduct.id)) {
+            this.cart.push({...this.viewingProduct});
+          }
+          this.addedToCartMsg = true;
+          history.pushState({}, '', '/cart');
+          this.currentPage = 'cart';
+        },
+
+        removeFromCart(item) {
+          this.cart = this.cart.filter(c => c.id !== item.id);
+        },
+
+        cartTotal() {
+          return this.cart.reduce((sum, item) => sum + item.price, 0);
+        },
+
+        goToCheckout() {
+          history.pushState({}, '', '/checkout');
+          this.currentPage = 'checkout';
+        },
+
+        placeOrder() {
+          this.errors = [];
+          {% if profile.enable_validation %}
+          if (!this.shipping.name.trim()) this.errors.push('Name is required');
+          if (!this.shipping.address.trim()) this.errors.push('Address is required');
+          if (!this.shipping.city.trim()) this.errors.push('City is required');
+          if (!this.shipping.pin.trim()) this.errors.push('PIN code is required');
+          if (!this.shipping.phone.trim()) this.errors.push('Phone number is required');
+          if (this.errors.length > 0) return;
+          {% else %}
+          if (!this.shipping.name || !this.shipping.address || !this.shipping.city) return;
+          {% endif %}
+          this.orderId = 'ORD' + Math.floor(Math.random() * 9000000000 + 1000000000);
+          history.pushState({}, '', '/confirmed');
+          this.currentPage = 'confirmed';
+        },
+      };
+    }
+  </script>
+</body>
+</html>
