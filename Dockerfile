@@ -8,14 +8,21 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps
+# Python deps — pin playwright to match Docker image version
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Ensure Chromium binary matches the installed playwright version
+RUN playwright install chromium
 
 # Copy source
 COPY infinite_dom/ ./infinite_dom/
 COPY inference.py client.py openenv.yaml ./
 COPY scripts/ ./scripts/
+
+# HF Spaces runs as uid 1000 — ensure browser cache is accessible
+RUN mkdir -p /home/pwuser/.cache && chmod -R 777 /home/pwuser/.cache
+RUN chmod -R 777 /tmp
 
 EXPOSE 8000 9000
 
