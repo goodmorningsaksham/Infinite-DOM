@@ -74,7 +74,7 @@ _llm_client = None
 _llm_failed = False
 
 SYSTEM_PROMPT = """You are a web agent navigating an interactive web application.
-You observe an accessibility tree and must complete a booking task.
+You observe an accessibility tree and must complete the given task.
 
 First, reason about what you see and what action to take inside <think> tags.
 Then, provide your action as a JSON object inside <answer> tags.
@@ -93,7 +93,13 @@ Rules:
 - Use "scroll" to scroll the page (scroll_delta: positive=down, negative=up)
 - Use "wait" when the page is loading or you need to observe
 - Element refs look like: inp_1, btn_2, cmb_1, lnk_3
-- Always dismiss cookie banners or popups before interacting with the main form"""
+
+Strategy:
+1. First dismiss any cookie banners, popups, or newsletter modals (click "Accept"/"Close"/"No Thanks")
+2. For booking tasks: type origin city → type destination → select class → click search → select train → confirm
+3. For shopping tasks: type search → select category → filter → click View → Add to Cart → Checkout → fill shipping → Place Order
+4. Always check if fields are already filled before typing — look at value= attributes
+5. If a field shows value="" it is EMPTY and needs "type" action, not "click" """
 
 
 def _get_llm_client():
@@ -213,6 +219,10 @@ TASK_NAMES = {
     2: "task_2_label_drift",
     3: "task_3_structural_drift",
     4: "task_4_full_chaos",
+    5: "task_5_ecommerce_clean",
+    6: "task_6_ecommerce_label_drift",
+    7: "task_7_ecommerce_structural_drift",
+    8: "task_8_ecommerce_full_chaos",
 }
 MAX_STEPS = 25
 
@@ -259,10 +269,10 @@ def run_task(task_id: int, seed: int = 42) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main — run all 4 tasks
+# Main — run all 8 tasks
 # ---------------------------------------------------------------------------
 def main() -> None:
-    tasks = [1, 2, 3, 4]
+    tasks = [1, 2, 3, 4, 5, 6, 7, 8]
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 42
 
     for task_id in tasks:
