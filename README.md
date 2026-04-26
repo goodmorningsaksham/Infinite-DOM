@@ -241,6 +241,7 @@ Booking and e-commerce are the **first two datasets** proving the concept. The a
 - **More variance dimensions**: larger synonym pools, more layout structures, multi-language labels, responsive breakpoints, dark/light themes
 - **Larger models**: the same SFT + GRPO pipeline works with 70B+ models given more compute — architecture is model-agnostic
 - **Multi-page workflows**: cross-page navigation, authentication flows, multi-tab operations, back-button handling
+- **Online RL (Phase 3)**: After SFT + GRPO, connect the trained model directly to the live environment via WebSocket for on-policy reinforcement learning. The agent generates its own trajectories against fresh procedurally-generated pages, receives dense reward from the semantic task graph, and updates its policy in real-time — learning from its actual mistakes instead of oracle demonstrations. Implementation: run PPO/GRPO with the environment's `reset()`→`step()` loop as the rollout source, using the same tolerant reward function. This closes the distribution gap between offline oracle data and live interaction. Skipped in our budget run (~30-45 min A100 time) but estimated to add 10-20% node completion improvement.
 - **Real-website transfer evaluation**: test trained agents against IRCTC, Amazon, Flipkart to measure zero-shot generalization from procedural training to the real web
 
 ---

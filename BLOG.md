@@ -165,6 +165,7 @@ The scaling path is clear:
 - **More variance**: larger synonym pools, more layouts, multi-language labels, responsive breakpoints
 - **Larger models**: the same pipeline works with 70B+ models given compute
 - **Multi-page workflows**: cross-page navigation, authentication flows, multi-tab operations
+- **Online RL (Phase 3)**: connect the post-GRPO model to the live environment for on-policy learning — the agent generates its own trajectories against fresh pages, receives dense reward from the task graph, and updates in real-time. This closes the gap between offline oracle data and live interaction. We skipped it on our $10 budget but estimate 10-20% improvement in node completion.
 - **Real-website transfer**: test trained agents against IRCTC, Amazon, Flipkart to measure whether procedural training transfers to the real web
 
 We believe this is the path to web agents that actually work in production: not agents trained on larger static datasets, but agents trained on procedurally generated variance that mirrors the diversity of the real web.
