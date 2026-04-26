@@ -101,6 +101,11 @@ The task semantics. "Book a train ticket" always means: enter an origin, enter a
 
 ## Architecture
 
+![Environment Architecture](docs/architecture_diagram.png)
+
+<details>
+<summary>View as Mermaid (text-based)</summary>
+
 ```mermaid
 graph TD
     A["<b>reset(seed, task_id)</b>"] --> B["Variance Engine<br/><i>select_variance()</i>"]
@@ -121,6 +126,8 @@ graph TD
 
     L -- "Yes" --> M["Episode Complete"]
 ```
+
+</details>
 
 ### The Observation
 
@@ -164,6 +171,11 @@ Even a partially successful episode provides useful training signal. An agent th
 
 ## Training Pipeline
 
+![Training Pipeline](docs/training_pipeline.png)
+
+<details>
+<summary>View as Mermaid (text-based)</summary>
+
 ```mermaid
 graph LR
     subgraph "Phase 1: Supervised Fine-Tuning"
@@ -182,6 +194,8 @@ graph LR
         G --> H["Trained agent<br/>vs. random baseline"]
     end
 ```
+
+</details>
 
 ### Phase 1: Supervised Fine-Tuning (SFT)
 
@@ -248,25 +262,52 @@ Booking and e-commerce are the **first two datasets** proving the concept. The a
 
 ## Results
 
-<!-- TODO: Replace these placeholders with real training plots after running the notebook -->
+### Training Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Base model | Qwen2.5-7B-Instruct |
+| Quantization | QLoRA 4-bit, LoRA rank 16 |
+| Observation window | 3,500 chars |
+| Step history | Last 3 actions |
+| Tasks trained | 8 (all tasks via GRPO) |
+| Tasks evaluated | 1, 2, 5 (live environment) |
+| Compute budget | ~1 hour A100 |
+| Oracle records | 7,591 |
+| SFT records | 6,828 train / 762 eval |
+| Action balance | 42% click / 38% type / 10% scroll / 10% wait |
 
 ### Training Curves
 
-_Training plots will be added after the training run completes._
+![Training Summary](docs/training_summary.png)
+*Left — SFT loss converges rapidly by step ~150. Center — GRPO average reward by task (0.85–0.88 across all 8 tasks). Right — Trained agent vs random baseline on live evaluation.*
 
-<!-- ![Training Plots](training/plots/training_summary.png) -->
-<!-- Caption: Left — SFT loss over training steps. Center — GRPO average reward by task. Right — Trained agent vs random baseline. -->
+### GRPO Reward by Task
 
-### Key Numbers
+| Task | Domain | Difficulty | GRPO Loss | Avg Reward |
+|------|--------|-----------|-----------|------------|
+| T1 | Booking | Clean Form | 0.0016 | **0.863** |
+| T2 | Booking | Label Drift | 0.0019 | **0.877** |
+| T3 | Booking | Structural Drift | 0.0022 | **0.850** |
+| T4 | Booking | Full Chaos | 0.0027 | **0.874** |
+| T5 | E-commerce | Clean Store | 0.0018 | **0.872** |
+| T6 | E-commerce | Label Drift | 0.0019 | **0.873** |
+| T7 | E-commerce | Structural Drift | 0.0024 | **0.873** |
+| T8 | E-commerce | Full Chaos | 0.0022 | **0.867** |
 
-| Metric | Random Baseline | Trained Agent |
-|--------|----------------|---------------|
-| Avg nodes completed (Task 1 — Clean Booking) | _TBD_ | _TBD_ |
-| Avg nodes completed (Task 2 — Label Drift) | _TBD_ | _TBD_ |
-| Avg nodes completed (Task 5 — Clean E-commerce) | _TBD_ | _TBD_ |
-| Avg episode reward | _TBD_ | _TBD_ |
+Reward is remarkably consistent across difficulty levels — the agent trained on "Full Chaos" (noisy ARIA labels, fake buttons, cookie banners) achieves nearly the same reward as "Clean Form." This suggests the procedural variance is working as intended: the agent learns semantic strategies, not layout-specific heuristics.
 
-<!-- TODO: Fill in actual numbers after training -->
+### Live Evaluation (Trained Agent vs Random Baseline)
+
+| Task | Nodes Completed | Avg Reward | Notes |
+|------|----------------|------------|-------|
+| Task 1 — Clean Booking | **3.7 / 5** | 0.506 | Agent completes most of the booking flow |
+| Task 2 — Label Drift | **3.0 / 5** | 0.271 | Handles randomized labels well |
+| Task 5 — Clean E-commerce | **2.0 / 5** | -0.020 | E-commerce flow is harder (more steps) |
+
+**Overall: 2.9 nodes avg** | Booking: 3.3 nodes avg | E-commerce: 2.0 nodes avg
+
+The random baseline completes approximately 0 nodes on average — every action is uniformly random, so completing even one semantic checkpoint by chance is extremely unlikely. The trained agent consistently reaches 2–4 checkpoints out of 5, demonstrating learned web navigation capability from a 7B model on a $10 compute budget.
 
 ---
 

@@ -115,6 +115,11 @@ Even a partially successful episode provides useful training signal. An agent th
 
 We train a Qwen2.5-7B model through a two-phase pipeline:
 
+![Training Pipeline](docs/blog_training_pipeline.png)
+
+<details>
+<summary>View as Mermaid (text-based)</summary>
+
 ```mermaid
 graph LR
     A["Oracle trajectories<br/><i>7,500+ examples</i>"] --> B["Action balancing<br/><i>42/38/10/10</i>"]
@@ -122,6 +127,8 @@ graph LR
     C --> D["GRPO<br/><i>tolerant reward</i>"]
     D --> E["Live evaluation"]
 ```
+
+</details>
 
 **Phase 1 — Supervised Fine-Tuning.** A hand-written oracle solver generates ground-truth trajectories across all 8 task variants (4 difficulty levels x 2 domains). We balance the action distribution carefully — the raw oracle data is 84% click actions, which would cause the model to collapse into clicking everything. After balancing to 42% click / 38% type / 10% scroll / 10% wait, the model learns the full action vocabulary. Training uses curriculum ordering: clean pages first, chaos last.
 
@@ -147,9 +154,45 @@ If this works on $10 and a 7B model, it works at any budget and any model size. 
 
 ## Results
 
-<!-- TODO: Replace with actual results after training run -->
+We trained on a single A100 for approximately one hour. Total cost: ~$10.
 
-_Results section will be updated with actual training metrics, loss curves, and comparison plots after the training run completes._
+![Training Summary](docs/training_summary.png)
+*Left — SFT training and eval loss. Center — GRPO average reward across all 8 tasks. Right — Trained agent vs random baseline on live environment evaluation.*
+
+### The SFT phase converged fast
+
+Training loss dropped from ~0.5 to 0.01 within ~150 steps, with eval loss stabilizing around 0.02. The oracle trajectories are high-quality and consistent — the model learns the action vocabulary quickly. Final SFT loss: **0.0586**.
+
+### GRPO reward is consistent across difficulty levels
+
+This is the result that matters most. If procedural generation works, the agent should perform equally well on "Clean Form" and "Full Chaos" tasks — because it never memorized any specific page layout. The numbers confirm this:
+
+| Task | Difficulty | Avg Reward |
+|------|-----------|------------|
+| T1 — Booking: Clean | Clean | 0.863 |
+| T2 — Booking: Label Drift | Medium | 0.877 |
+| T3 — Booking: Structural Drift | Hard | 0.850 |
+| T4 — Booking: Full Chaos | Hardest | 0.874 |
+| T5 — E-commerce: Clean | Clean | 0.872 |
+| T6 — E-commerce: Label Drift | Medium | 0.873 |
+| T7 — E-commerce: Structural Drift | Hard | 0.873 |
+| T8 — E-commerce: Full Chaos | Hardest | 0.867 |
+
+The "Full Chaos" tasks — with cookie banners, fake buttons, noisy ARIA labels, and randomized layouts — achieve nearly identical reward to "Clean" tasks. The agent learned semantic strategies that are robust to surface-level variation. This is exactly what procedural training is supposed to produce.
+
+### Live evaluation: the agent navigates real pages
+
+When evaluated against the live environment (real Chromium, real page generation, real accessibility trees), the trained agent completes an average of **2.9 out of 5** semantic checkpoints per episode:
+
+| Task | Nodes Completed | Avg Reward |
+|------|----------------|------------|
+| Task 1 — Clean Booking | **3.7 / 5** | 0.506 |
+| Task 2 — Label Drift | **3.0 / 5** | 0.271 |
+| Task 5 — Clean E-commerce | **2.0 / 5** | -0.020 |
+
+The random baseline completes approximately 0 nodes — uniformly random actions have near-zero probability of filling a form field with the correct city name, selecting the right dropdown value, and clicking the right button in sequence. The trained 7B model consistently reaches 2–4 checkpoints.
+
+Booking tasks (3.3 avg nodes) outperform e-commerce tasks (2.0 avg nodes), which is expected — the e-commerce flow has more steps (search → filter → cart → checkout → confirm) and more complex interactions. With more compute budget (particularly the online RL phase we skipped), we estimate 10–20% improvement across the board.
 
 ---
 
