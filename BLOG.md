@@ -115,7 +115,7 @@ Even a partially successful episode provides useful training signal. An agent th
 
 We train a Qwen2.5-7B model through a two-phase pipeline:
 
-![Training Pipeline](docs/blog_training_pipeline.png)
+![Training Pipeline](https://raw.githubusercontent.com/goodmorningsaksham/Infinite-DOM/main/docs/blog_training_pipeline.png)
 
 <details>
 <summary>View as Mermaid (text-based)</summary>
@@ -156,7 +156,7 @@ If this works on $10 and a 7B model, it works at any budget and any model size. 
 
 We trained on a single A100 for approximately one hour. Total cost: ~$10.
 
-![Training Summary](docs/training_summary.png)
+![Training Summary](https://raw.githubusercontent.com/goodmorningsaksham/Infinite-DOM/main/docs/training_summary.png)
 *Left — SFT training and eval loss. Center — GRPO average reward across all 8 tasks. Right — Trained agent vs random baseline on live environment evaluation.*
 
 ### The SFT phase converged fast
@@ -219,7 +219,7 @@ We believe this is the path to web agents that actually work in production: not 
 
 - **Live environment:** [saksham1771/infinite-dom on HF Spaces](https://huggingface.co/spaces/saksham1771/infinite-dom)
 - **Training notebook:** [train_infinite_dom_v2.ipynb](training/train_infinite_dom_v2.ipynb)
-- **Source code:** [github.com/saksham1771/infinite-dom](https://github.com/saksham1771/infinite-dom)
+- **Source code:** [github.com/goodmorningsaksham/Infinite-DOM](https://github.com/goodmorningsaksham/Infinite-DOM)
 
 ---
 

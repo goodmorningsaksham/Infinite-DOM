@@ -101,7 +101,7 @@ The task semantics. "Book a train ticket" always means: enter an origin, enter a
 
 ## Architecture
 
-![Environment Architecture](docs/architecture_diagram.png)
+![Environment Architecture](https://raw.githubusercontent.com/goodmorningsaksham/Infinite-DOM/main/docs/architecture_diagram.png)
 
 <details>
 <summary>View as Mermaid (text-based)</summary>
@@ -171,7 +171,7 @@ Even a partially successful episode provides useful training signal. An agent th
 
 ## Training Pipeline
 
-![Training Pipeline](docs/training_pipeline.png)
+![Training Pipeline](https://raw.githubusercontent.com/goodmorningsaksham/Infinite-DOM/main/docs/training_pipeline.png)
 
 <details>
 <summary>View as Mermaid (text-based)</summary>
@@ -279,7 +279,7 @@ Booking and e-commerce are the **first two datasets** proving the concept. The a
 
 ### Training Curves
 
-![Training Summary](docs/training_summary.png)
+![Training Summary](https://raw.githubusercontent.com/goodmorningsaksham/Infinite-DOM/main/docs/training_summary.png)
 *Left — SFT loss converges rapidly by step ~150. Center — GRPO average reward by task (0.85–0.88 across all 8 tasks). Right — Trained agent vs random baseline on live evaluation.*
 
 ### GRPO Reward by Task
