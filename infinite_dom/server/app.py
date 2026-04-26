@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 try:
     from openenv.core.env_server.http_server import create_app
@@ -73,3 +73,16 @@ async def list_tasks():
             for tid, desc in TASK_DESCRIPTIONS.items()
         ]
     })
+
+
+@app.get("/screenshot")
+async def get_screenshot():
+    """Return a PNG screenshot of the current browser page."""
+    from infinite_dom.environment.infinite_dom_env import _ACTIVE_ENV
+
+    if _ACTIVE_ENV is None or not _ACTIVE_ENV._driver_started:
+        return JSONResponse({"error": "No active environment session"}, status_code=404)
+    png = await _ACTIVE_ENV._driver.screenshot()
+    if png is None:
+        return JSONResponse({"error": "Screenshot failed"}, status_code=500)
+    return Response(content=png, media_type="image/png")

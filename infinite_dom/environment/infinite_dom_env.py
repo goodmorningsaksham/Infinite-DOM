@@ -23,6 +23,8 @@ from infinite_dom.reward_calculator import compute_reward
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_ENV: "InfiniteDOMEnvironment | None" = None
+
 
 def _run_async(coro):
     """Run an async coroutine from sync context, handling existing event loops."""
@@ -56,11 +58,13 @@ class InfiniteDOMEnvironment(Environment):
     """
 
     def __init__(self):
+        global _ACTIVE_ENV
         self._generator = DOMGenerator()
         self._driver = PlaywrightDriver()
         self._driver_started = False
         self._current_page: GeneratedPage | None = None
         self._state: DOMState | None = None
+        _ACTIVE_ENV = self
 
     def reset(self, seed: int | None = None, episode_id: str | None = None, **kwargs) -> DOMObservation:
         task_id = kwargs.get("task_id", 1)

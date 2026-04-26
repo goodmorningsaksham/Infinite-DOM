@@ -1418,6 +1418,203 @@ print("Saved: training_curves.png")
 plt.show()"""))
 
 # ============================================================
+# CELL 14.5 -- Visual Demo: Agent Navigating with Screenshots
+# ============================================================
+cells.append(cell("code", r"""# Cell 12.5 -- VISUAL DEMO: Watch the Trained Agent Navigate a Real Website
+#
+# This cell connects to the live environment, runs the trained model step-by-step,
+# and displays real browser screenshots showing the agent filling forms and clicking buttons.
+# Screen-record this cell running for your submission video.
+
+import httpx
+import asyncio
+import nest_asyncio
+import websockets
+import json
+import base64
+import re
+from IPython.display import display, Image, HTML, clear_output
+
+nest_asyncio.apply()
+
+if not env_available:
+    print("Environment not available -- skipping visual demo.")
+else:
+    SCREENSHOT_URL = HF_SPACE_URL + "/screenshot"
+    DEMO_TASK = 1
+    DEMO_SEED = 42
+    DEMO_MAX_STEPS = 12
+    OBS_MAX_CHARS_DEMO = 6000
+
+    def get_screenshot():
+        '''Fetch a browser screenshot from the environment server.'''
+        try:
+            r = httpx.get(SCREENSHOT_URL, timeout=15)
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+                return r.content
+        except Exception as e:
+            print(f"  (screenshot unavailable: {e})")
+        return None
+
+    def parse_action_demo(text):
+        text = text.strip()
+        if "<answer>" in text:
+            start = text.index("<answer>") + len("<answer>")
+            end = text.index("</answer>") if "</answer>" in text else len(text)
+            text = text[start:end].strip()
+        try:
+            parsed = json.loads(text)
+            return {
+                "action_type": parsed.get("action_type", "wait"),
+                "element_ref": parsed.get("element_ref", ""),
+                "text_value": parsed.get("text_value", ""),
+                "scroll_delta": parsed.get("scroll_delta", 0),
+            }
+        except Exception:
+            result = {"action_type": "wait", "element_ref": "", "text_value": "", "scroll_delta": 0}
+            at = re.search(r'"action_type"\s*:\s*"(\w+)"', text)
+            if at: result["action_type"] = at.group(1)
+            ref = re.search(r'"element_ref"\s*:\s*"([^"]*)"', text)
+            if ref: result["element_ref"] = ref.group(1)
+            tv = re.search(r'"text_value"\s*:\s*"([^"]*)"', text)
+            if tv: result["text_value"] = tv.group(1)
+            return result
+
+    async def visual_demo():
+        FastLanguageModel.for_inference(model)
+
+        print("=" * 70)
+        print("  VISUAL DEMO: Trained Agent Navigating a Real Web Page")
+        print("=" * 70)
+        print(f"  Task: {DEMO_TASK} | Seed: {DEMO_SEED}")
+        print()
+
+        screenshots = []
+
+        async with websockets.connect(WS_URL, open_timeout=30, close_timeout=10) as ws:
+            # Reset
+            await ws.send(json.dumps({"type": "reset", "data": {"task_id": DEMO_TASK, "seed": DEMO_SEED}}))
+            resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
+            obs_data = resp.get("data", resp)
+            obs = obs_data.get("observation", obs_data)
+
+            instruction = obs.get("task_instruction", "")
+            a11y_tree = obs.get("a11y_tree", "")
+            progress = obs.get("task_progress", [])
+
+            print(f"  Task: {instruction}")
+            print()
+
+            # Initial screenshot
+            import time
+            time.sleep(0.5)
+            img = get_screenshot()
+            if img:
+                print("  [Initial Page]")
+                display(Image(data=img, width=700))
+                screenshots.append(("Initial Page", img))
+            print()
+
+            step_history = []
+
+            for step_i in range(DEMO_MAX_STEPS):
+                # Build prompt
+                hist_str = ""
+                if step_history:
+                    hlines = [f"  Step {s['step']}: {s['atype']} {s['ref']}" +
+                              (f' "{s["tval"]}"' if s.get("tval") else "")
+                              for s in step_history[-3:]]
+                    hist_str = "\nPrevious actions:\n" + "\n".join(hlines) + "\n"
+
+                step_ctx = f"\nStep: {step_i}" if step_i > 0 else ""
+                user_msg = f"Task: {instruction}{hist_str}\n\nAccessibility Tree:\n{a11y_tree[:OBS_MAX_CHARS_DEMO]}{step_ctx}"
+
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ]
+                prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+                outputs = model.generate(**inputs, max_new_tokens=250, temperature=0.1)
+                response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+
+                action = parse_action_demo(response)
+                atype = action["action_type"]
+                aref = action.get("element_ref", "")
+                atval = action.get("text_value", "")
+
+                # Print action
+                action_desc = f"{atype} {aref}"
+                if atval:
+                    action_desc += f' "{atval}"'
+                print(f"  Step {step_i}: {action_desc}")
+
+                # Show thinking if present
+                if "<think>" in response and "</think>" in response:
+                    think = response[response.index("<think>")+7:response.index("</think>")].strip()
+                    print(f"    Think: {think[:150]}")
+
+                # Execute
+                await ws.send(json.dumps({"type": "step", "data": action}))
+                step_resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
+                step_data = step_resp.get("data", step_resp)
+                step_obs = step_data.get("observation", step_data)
+
+                new_progress = step_obs.get("task_progress", progress)
+                done = step_data.get("done", False)
+                a11y_tree = step_obs.get("a11y_tree", a11y_tree)
+                reward = step_data.get("reward", 0)
+
+                newly_done = [n for n in new_progress if n not in progress]
+                progress = new_progress
+
+                if newly_done:
+                    print(f"    >> Node completed: {newly_done} (reward: {reward:+.3f})")
+
+                step_history.append({
+                    "step": step_i, "atype": atype, "ref": aref, "tval": atval
+                })
+
+                # Screenshot after action
+                time.sleep(0.3)
+                img = get_screenshot()
+                if img and (newly_done or atype == "type" or step_i == 0):
+                    caption = f"After step {step_i}: {action_desc}"
+                    print(f"  [{caption}]")
+                    display(Image(data=img, width=700))
+                    screenshots.append((caption, img))
+
+                print(f"    Progress: {len(progress)} nodes | Done: {done}")
+                print()
+
+                if done:
+                    print(f"  EPISODE COMPLETE!")
+                    print(f"  Nodes: {len(progress)} | Total reward: {sum(step_data.get('reward', 0) for _ in [1]):.3f}")
+                    # Final screenshot
+                    time.sleep(0.5)
+                    img = get_screenshot()
+                    if img:
+                        print("  [Final State]")
+                        display(Image(data=img, width=700))
+                        screenshots.append(("Final State", img))
+                    break
+
+        print()
+        print("=" * 70)
+        print(f"  Demo complete: {len(progress)} nodes completed in {step_i+1} steps")
+        print(f"  Screenshots captured: {len(screenshots)}")
+        print("=" * 70)
+
+        # Save screenshots
+        for i, (caption, img_data) in enumerate(screenshots):
+            fname = f"demo_screenshot_{i}.png"
+            with open(fname, "wb") as f:
+                f.write(img_data)
+        print(f"\nScreenshots saved as demo_screenshot_*.png")
+
+    asyncio.get_event_loop().run_until_complete(visual_demo())"""))
+
+# ============================================================
 # CELL 15 -- Summary Report
 # ============================================================
 cells.append(cell("code", """# Cell 13 -- Summary Report

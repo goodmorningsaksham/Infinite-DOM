@@ -355,6 +355,16 @@ class PlaywrightDriver:
 
         return False
 
+    async def screenshot(self) -> bytes | None:
+        """Take a PNG screenshot of the current page."""
+        if self._page is None:
+            return None
+        try:
+            return await self._page.screenshot(type="png", full_page=False)
+        except Exception as e:
+            logger.warning("Screenshot failed: %s", e)
+            return None
+
     async def _resolve_locator(self, ref):
         """
         Resolve an A11yRef to a Playwright Locator.
