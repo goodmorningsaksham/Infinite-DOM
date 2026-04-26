@@ -26,24 +26,22 @@ cells.append(cell("markdown", """# Infinite DOM -- Training Notebook (V2 -- Impr
 **Runtime:** A100 (80GB) recommended. T4 works with 7B model fallback.
 
 ## What Changed from V1
-1. **Model**: Qwen2.5-3B -> **Qwen2.5-14B** (A100 has 80GB -- use it)
+1. **Model**: Qwen2.5-3B -> **Qwen2.5-7B** (good balance of speed + quality on A100)
 2. **SFT Data**: 224 CoT records -> **all 7,591 oracle records** with balanced action types
 3. **Action Balance**: 88% click -> **42% click / 38% type / 10% scroll / 10% wait**
 4. **Step History**: Each training example includes previous 2-3 actions as context
 5. **Curriculum SFT**: Easy tasks first, hard tasks added progressively
 6. **Tolerant GRPO Reward**: Accepts any valid next action, not just oracle's specific choice
-7. **GRPO Scale**: 200 records -> **600/task**, 2 gens -> **4 gens**, 1 epoch -> **2 epochs**
-8. **Online RL**: 5 eps -> **15 eps/task**, success threshold 1 node -> **40% completion**
-9. **Pre-training validation gate**: Aborts if action distribution is imbalanced
+7. **GRPO Scale**: 200 records -> **300/task**, 2 gens, 1 epoch (budget-optimised)
+8. **Pre-training validation gate**: Aborts if action distribution is imbalanced
 
 ## Pipeline
 1. Install dependencies & configure remote environment
 2. Load **full** oracle training data (7,591 records, all 8 tasks)
 3. Balance action types + add step history + curriculum ordering
-4. **SFT Phase** -- Curriculum behaviour cloning (easy->hard, 5 epochs)
-5. **GRPO Phase** -- Tolerant per-step reward (600 records/task, 4 gens)
-6. **Online RL** -- Agent runs in live env, filtered for productive episodes
-7. Live evaluation + plots"""))
+4. **SFT Phase** -- Curriculum behaviour cloning (easy->hard, 2 epochs)
+5. **GRPO Phase** -- Tolerant per-step reward (300 records/task, 2 gens)
+6. Live evaluation + plots"""))
 
 # ============================================================
 # CELL 1 -- Install dependencies
@@ -68,8 +66,8 @@ if torch.cuda.is_available():
     vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
     print(f"VRAM: {vram_gb:.1f} GB")
     if vram_gb >= 40:
-        print("A100/A6000 detected -- will use 14B model")
-        RECOMMENDED_MODEL = "14B"
+        print("A100/A6000 detected -- will use 7B model (budget mode)")
+        RECOMMENDED_MODEL = "7B"
     elif vram_gb >= 14:
         print("T4/V100 detected -- will use 7B model")
         RECOMMENDED_MODEL = "7B"
@@ -264,7 +262,7 @@ import random as stdlib_random
 from datasets import Dataset
 from unsloth import FastLanguageModel
 
-MODEL_ID = "unsloth/Qwen2.5-14B-Instruct"  # V2: upgraded from 3B
+MODEL_ID = "unsloth/Qwen2.5-7B-Instruct"  # V2-lite: 7B for budget, still strong
 MAX_SEQ_LEN = 4096
 
 model, tokenizer = FastLanguageModel.from_pretrained(
@@ -505,57 +503,56 @@ print(f"  {train_ds[0]['text'][:400]}...")"""))
 # ============================================================
 # CELL 5 -- Load model with LoRA
 # ============================================================
-cells.append(cell("code", """# Cell 5 -- Apply LoRA adapters to 14B model
+cells.append(cell("code", """# Cell 5 -- Apply LoRA adapters to 7B model
 #
-# V2: Using 14B instead of 3B. LoRA rank 32 (was 16) for more capacity.
-# A100-80GB handles this easily.
+# V2-lite: 7B with LoRA rank 16. Faster training, lower VRAM.
 
 model = FastLanguageModel.get_peft_model(
     model,
-    r=32,              # V2: increased from 16 for 14B model capacity
+    r=16,              # rank 16 is sufficient for 7B
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                      "gate_proj", "up_proj", "down_proj"],
-    lora_alpha=32,
+    lora_alpha=16,
     lora_dropout=0,
     bias="none",
     use_gradient_checkpointing="unsloth",
 )
 
 print(f"Model: {MODEL_ID}")
-print(f"LoRA rank: 32, alpha: 32")
+print(f"LoRA rank: 16, alpha: 16")
 print(f"Trainable params: {model.print_trainable_parameters()}")"""))
 
 # ============================================================
 # CELL 6 -- Curriculum SFT
 # ============================================================
-cells.append(cell("code", """# Cell 6 -- Curriculum SFT Training (5 epochs, early stopping)
+cells.append(cell("code", """# Cell 6 -- Curriculum SFT Training (2 epochs, budget mode)
 #
-# V2 CHANGES:
-#   - 5,000+ records (was 224)
-#   - 5 epochs (was 3)
-#   - Curriculum ordering in data (easy->hard) -- model sees clean tasks more in early epochs
-#   - Larger eval set covering all 8 tasks
+# V2-lite CHANGES:
+#   - Full balanced dataset (not 224 records)
+#   - 2 epochs (sufficient for format learning + action diversity)
+#   - Batch size 4 for 7B (faster than 14B)
+#   - Early stopping patience 2
 
 from trl import SFTTrainer, SFTConfig
 from transformers import EarlyStoppingCallback
 import math
 
 num_samples = len(train_ds)
-batch_size = 2     # 14B model needs smaller batch
-grad_accum = 8     # Effective batch = 16
+batch_size = 4     # 7B allows larger batch
+grad_accum = 4     # Effective batch = 16
 effective_batch = batch_size * grad_accum
-num_epochs = 5
+num_epochs = 2
 steps_per_epoch = math.ceil(num_samples / effective_batch)
 total_steps = steps_per_epoch * num_epochs
 
-eval_interval = max(1, steps_per_epoch // 4)
+eval_interval = max(1, steps_per_epoch // 3)
 log_interval = max(1, eval_interval // 2)
 
 print(f"Dataset: {num_samples} samples")
 print(f"Effective batch size: {effective_batch}")
 print(f"Steps per epoch: {steps_per_epoch} | Total steps: {total_steps}")
 print(f"Eval every {eval_interval} steps | Log every {log_interval} steps")
-print(f"Epochs: {num_epochs} (with early stopping patience=4)")
+print(f"Epochs: {num_epochs} (with early stopping patience=2)")
 print()
 
 sft_config = SFTConfig(
@@ -563,8 +560,8 @@ sft_config = SFTConfig(
     num_train_epochs=num_epochs,
     per_device_train_batch_size=batch_size,
     gradient_accumulation_steps=grad_accum,
-    learning_rate=1e-4,       # Slightly lower for 14B
-    warmup_steps=min(100, total_steps // 10),
+    learning_rate=2e-4,       # Standard for 7B
+    warmup_steps=min(50, total_steps // 10),
     logging_steps=log_interval,
     save_steps=eval_interval,
     eval_strategy="steps",
@@ -587,12 +584,12 @@ trainer = SFTTrainer(
     train_dataset=train_ds,
     eval_dataset=eval_ds,
     args=sft_config,
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=4)],
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
 )
 
 print(f"Starting SFT training...")
 print(f"  Train: {len(train_ds)} | Eval: {len(eval_ds)}")
-print(f"  Epochs: {num_epochs} | Early stopping patience: 4")
+print(f"  Epochs: {num_epochs} | Early stopping patience: 2")
 print()
 
 sft_results = trainer.train()
@@ -782,7 +779,7 @@ if "CHECKPOINT_DIR" not in dir():
     CHECKPOINT_DIR = "./checkpoints"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
-MAX_RECORDS_PER_TASK = 600   # V2: was 200
+MAX_RECORDS_PER_TASK = 300   # V2-lite: 300 per task (budget)
 TARGET_MINORITY_PCT = 0.35
 
 TASK_LABELS = {
@@ -971,14 +968,14 @@ def balance_task_actions(task_records, target_minority_pct, rng_seed):
 # --- GRPO Config ---
 grpo_config = GRPOConfig(
     output_dir="./grpo_output",
-    num_train_epochs=2,           # V2: was 1
-    per_device_train_batch_size=1,  # 14B model needs smaller batch
-    gradient_accumulation_steps=8,  # Effective batch = 8
-    learning_rate=3e-6,           # Lower for 14B
+    num_train_epochs=1,           # V2-lite: 1 epoch (budget)
+    per_device_train_batch_size=2,  # 7B allows batch 2
+    gradient_accumulation_steps=4,  # Effective batch = 8
+    learning_rate=5e-6,           # Standard for 7B GRPO
     logging_steps=10,
     save_steps=500,
-    max_completion_length=300,    # V2: was 256, more room for think+answer
-    num_generations=4,            # V2: was 2 -- better ranking signal
+    max_completion_length=300,
+    num_generations=2,            # V2-lite: 2 gens (budget)
     temperature=0.7,
     report_to="none",
     seed=42,
@@ -1103,258 +1100,18 @@ for rh in reward_history:
     print(f"  Task {rh['task_id']} ({rh['label']}): loss={rh['loss']:.4f}{r_str}")"""))
 
 # ============================================================
-# CELL 10 -- Online RL with Improved Filtering
+# CELL 10 -- Online RL (SKIPPED in budget mode)
 # ============================================================
-cells.append(cell("code", r"""# Cell 8.5 -- Online RL: Reinforced Self-Training with Live Environment
+cells.append(cell("code", """# Cell 8.5 -- Online RL: SKIPPED (budget mode)
 #
-# V2 CHANGES:
-#   1. 15 episodes per task (was 5)
-#   2. Success threshold: 40% node completion (was 1 node)
-#   3. Only use steps that led to node completion (productive steps)
-#   4. Robust WebSocket with per-episode timeout and reconnect
+# Online RL is skipped to save compute. SFT + GRPO provide the core improvements.
+# The model already learns per-step action quality from GRPO.
+# Online RL would add ~10-20% improvement but costs 30-45 min of A100 time.
+#
+# To enable it later, replace this cell with the full Online RL cell from V2-full.
 
-import asyncio
-import nest_asyncio
-import websockets
-import httpx
-
-nest_asyncio.apply()
-
-INFINITE_DOM_URL = os.environ.get("INFINITE_DOM_URL", HF_SPACE_URL)
-WS_URL = INFINITE_DOM_URL.replace("https://", "wss://").replace("http://", "ws://") + "/ws"
-
-print("Online RL: Checking live environment...")
-env_ok = False
-try:
-    r = httpx.get(f"{INFINITE_DOM_URL}/health", timeout=30)
-    if r.status_code == 200:
-        print(f"  HTTP: OK")
-        env_ok = True
-except Exception as e:
-    print(f"  Connection failed: {e}")
-
-if not env_ok:
-    print("\nHF Space not available -- skipping online RL.")
-    online_rl_stats = {"skipped": True, "reason": "env_unavailable"}
-else:
-    EPISODES_PER_TASK = 15    # V2: was 5
-    MAX_EPISODE_STEPS = 25
-    MIN_COMPLETION_RATE = 0.40  # V2: was 1 node -- now need 40% of nodes
-
-    FastLanguageModel.for_inference(model)
-
-    def parse_model_output_safe(text):
-        text = text.strip()
-        if "<answer>" in text:
-            start = text.index("<answer>") + len("<answer>")
-            end = text.index("</answer>") if "</answer>" in text else len(text)
-            text = text[start:end].strip()
-        if text.startswith("```"):
-            parts = text.split("```")
-            if len(parts) > 1:
-                text = parts[1].lstrip("json").strip()
-        try:
-            parsed = json.loads(text)
-            return {
-                "action_type": parsed.get("action_type", "wait"),
-                "element_ref": parsed.get("element_ref", ""),
-                "text_value": parsed.get("text_value", ""),
-                "scroll_delta": parsed.get("scroll_delta", 0),
-            }
-        except (json.JSONDecodeError, TypeError):
-            # Regex fallback
-            result = {"action_type": "wait", "element_ref": "", "text_value": "", "scroll_delta": 0}
-            at = re.search(r'"action_type"\s*:\s*"(\w+)"', text)
-            if at:
-                result["action_type"] = at.group(1)
-            ref = re.search(r'"element_ref"\s*:\s*"([^"]*)"', text)
-            if ref:
-                result["element_ref"] = ref.group(1)
-            tv = re.search(r'"text_value"\s*:\s*"([^"]*)"', text)
-            if tv:
-                result["text_value"] = tv.group(1)
-            return result
-
-    async def run_episode(task_id, seed):
-        '''Run one episode via WebSocket, return trajectory with node completion info.'''
-        trajectory = []
-        try:
-            async with websockets.connect(WS_URL, open_timeout=30, close_timeout=10) as ws:
-                # Reset
-                await ws.send(json.dumps({"type": "reset", "data": {"task_id": task_id, "seed": seed}}))
-                resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
-                obs_data = resp.get("data", resp)
-                # OpenEnv WS response: {"type":"observation","data":{"observation":{...},"reward":...,"done":...}}
-                obs = obs_data.get("observation", obs_data)
-
-                instruction = obs.get("task_instruction", "")
-                a11y_tree = obs.get("a11y_tree", "")
-                progress = obs.get("task_progress", [])
-                total_nodes = obs_data.get("metadata", obs.get("metadata", {})).get("total_nodes", 5)
-                step_history = []
-
-                for step_i in range(MAX_EPISODE_STEPS):
-                    # Build prompt with history
-                    history = ""
-                    if step_history:
-                        hlines = [f"  Step {s['step']}: {s['action_type']} {s['element_ref']}" +
-                                  (f' \"{s["text_value"]}\"' if s.get("text_value") else "")
-                                  for s in step_history[-STEP_HISTORY_WINDOW:]]
-                        history = "\nPrevious actions:\n" + "\n".join(hlines) + "\n"
-
-                    user_msg = f"Task: {instruction}{history}\n\nAccessibility Tree:\n{a11y_tree[:OBS_MAX_CHARS]}"
-                    if step_i > 0:
-                        user_msg += f"\nStep: {step_i}"
-
-                    messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ]
-                    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-                    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-                    outputs = model.generate(**inputs, max_new_tokens=250, temperature=0.3, do_sample=True)
-                    response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-
-                    action = parse_model_output_safe(response)
-
-                    # Record state before action
-                    prev_progress = list(progress)
-
-                    # Step
-                    await ws.send(json.dumps({"type": "step", "data": action}))
-                    step_resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
-                    step_data = step_resp.get("data", step_resp)
-                    step_obs = step_data.get("observation", step_data)
-
-                    new_progress = step_obs.get("task_progress", progress)
-                    newly_completed = [n for n in new_progress if n not in prev_progress]
-                    done = step_data.get("done", False)
-                    a11y_tree = step_obs.get("a11y_tree", a11y_tree)
-                    progress = new_progress
-
-                    step_record = {
-                        "step": step_i,
-                        "action_type": action["action_type"],
-                        "element_ref": action.get("element_ref", ""),
-                        "text_value": action.get("text_value", ""),
-                        "newly_completed": newly_completed,
-                        "user_msg": user_msg,
-                        "response": response,
-                    }
-                    trajectory.append(step_record)
-                    step_history.append(step_record)
-
-                    if done:
-                        break
-
-                return {
-                    "task_id": task_id,
-                    "seed": seed,
-                    "total_nodes": total_nodes,
-                    "completed": len(progress),
-                    "trajectory": trajectory,
-                    "instruction": instruction,
-                }
-        except Exception as e:
-            print(f"    Episode error (task={task_id}, seed={seed}): {type(e).__name__}: {e}")
-            return None
-
-    # --- Collect episodes ---
-    print(f"\nCollecting online trajectories: {EPISODES_PER_TASK} episodes x 8 tasks")
-    print(f"Success threshold: {MIN_COMPLETION_RATE*100:.0f}% node completion")
-    print("=" * 60)
-
-    all_training_pairs = []
-    online_rl_stats = {"episodes": 0, "successful": 0, "pairs": 0, "per_task": {}}
-
-    for task_id in range(1, 9):
-        task_pairs = []
-        task_successes = 0
-
-        for ep in range(EPISODES_PER_TASK):
-            seed = ep * 7 + task_id * 100
-            result = asyncio.get_event_loop().run_until_complete(run_episode(task_id, seed))
-
-            if result is None:
-                continue
-
-            online_rl_stats["episodes"] += 1
-            completion_rate = result["completed"] / max(result["total_nodes"], 1)
-            is_success = completion_rate >= MIN_COMPLETION_RATE
-            marker = " *" if is_success else ""
-            print(f"  Task {task_id} seed {seed}: {result['completed']}/{result['total_nodes']} nodes ({completion_rate:.0%}){marker}")
-
-            if is_success:
-                task_successes += 1
-                # V2: Only use PRODUCTIVE steps (steps that led to node completion,
-                # plus the 1-2 steps before them)
-                traj = result["trajectory"]
-                productive_indices = set()
-                for i, step in enumerate(traj):
-                    if step["newly_completed"]:
-                        for j in range(max(0, i - 1), i + 1):
-                            productive_indices.add(j)
-
-                for i in productive_indices:
-                    step = traj[i]
-                    text = tokenizer.apply_chat_template([
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": step["user_msg"]},
-                        {"role": "assistant", "content": step["response"]},
-                    ], tokenize=False, add_generation_prompt=False)
-                    task_pairs.append({"text": text})
-
-        print(f"  => {task_successes}/{EPISODES_PER_TASK} successful, {len(task_pairs)} productive pairs")
-        all_training_pairs.extend(task_pairs)
-        online_rl_stats["successful"] += task_successes
-        online_rl_stats["per_task"][task_id] = {"successes": task_successes, "pairs": len(task_pairs)}
-
-    online_rl_stats["pairs"] = len(all_training_pairs)
-
-    print(f"\n{'='*60}")
-    print(f"Online RL collection: {online_rl_stats['episodes']} episodes, "
-          f"{online_rl_stats['successful']} successful, {online_rl_stats['pairs']} training pairs")
-
-    if len(all_training_pairs) >= 50:
-        online_ds = Dataset.from_list(all_training_pairs)
-
-        FastLanguageModel.for_training(model)
-
-        online_config = SFTConfig(
-            output_dir="./online_rl_output",
-            num_train_epochs=2,
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=8,
-            learning_rate=5e-7,  # Very low LR -- don't overwrite GRPO gains
-            logging_steps=20,
-            save_steps=500,
-            fp16=not torch.cuda.is_bf16_supported(),
-            bf16=torch.cuda.is_bf16_supported(),
-            max_seq_length=MAX_SEQ_LEN,
-            dataset_text_field="text",
-            seed=42,
-            report_to="none",
-        )
-
-        online_trainer = SFTTrainer(
-            model=model, tokenizer=tokenizer, train_dataset=online_ds, args=online_config,
-        )
-
-        print(f"\nFine-tuning on {len(online_ds)} productive trajectory pairs...")
-        online_result = online_trainer.train()
-        print(f"  Loss: {online_result.training_loss:.4f}")
-
-        model.save_pretrained(f"{CHECKPOINT_DIR}/online_rl_final")
-        tokenizer.save_pretrained(f"{CHECKPOINT_DIR}/online_rl_final")
-        print(f"  Checkpoint: {CHECKPOINT_DIR}/online_rl_final")
-
-        del online_trainer
-        gc.collect()
-        torch.cuda.empty_cache()
-    else:
-        print(f"\nOnly {len(all_training_pairs)} pairs -- too few for fine-tuning. Skipping.")
-        print("This is OK -- SFT + GRPO already trained the model.")"""))
-
+print("Online RL: SKIPPED (budget mode)")
+print("SFT + GRPO training is complete. Proceeding to quality check and evaluation.")"""))
 # ============================================================
 # CELL 11 -- Quality Check
 # ============================================================
@@ -1441,7 +1198,7 @@ except Exception as e:
     print(f"ERROR: {e}")
     raise SystemExit("Environment not available for evaluation")
 
-EVAL_SEEDS = 5  # Seeds per task
+EVAL_SEEDS = 3  # Seeds per task (budget mode)
 MAX_EVAL_STEPS = 20
 
 FastLanguageModel.for_inference(model)
@@ -1522,7 +1279,7 @@ async def eval_episode(task_id, seed, use_model=True):
 # --- Random Baseline ---
 print("\n=== Random Baseline ===")
 random_results = {}
-for task_id in [1, 5]:
+for task_id in [1, 2, 5]:
     nodes_list = []
     for seed in range(EVAL_SEEDS):
         n, t, s, r = asyncio.get_event_loop().run_until_complete(eval_episode(task_id, seed * 17, use_model=False))
@@ -1532,12 +1289,12 @@ for task_id in [1, 5]:
     print(f"  Task {task_id}: avg {avg:.1f}/{t} nodes")
 
 # --- Trained Model ---
-print("\n=== Trained Model -- All 8 Tasks ===")
+print("\n=== Trained Model -- Tasks 1, 2, 5 (budget eval) ===")
 trained_results = {}
 trained_totals = {}
 trained_rewards = {}
 
-for task_id in range(1, 9):
+for task_id in [1, 2, 5]:
     nodes_list = []
     reward_list = []
     total = 5
@@ -1616,17 +1373,15 @@ if reward_history:
     rewards = [rh["avg_reward"] or 0 for rh in reward_history]
     labels = [f"T{rh['task_id']}" for rh in reward_history]
 
-    colors = ["#2ecc71", "#27ae60", "#1abc9c", "#16a085",  # Booking (greens)
-              "#e74c3c", "#c0392b", "#e67e22", "#d35400"]  # E-commerce (reds)
-    bars = ax.bar(labels, rewards, color=colors[:len(labels)])
+    colors_map = {1: "#2ecc71", 2: "#27ae60", 3: "#1abc9c", 4: "#16a085",
+                  5: "#e74c3c", 6: "#c0392b", 7: "#e67e22", 8: "#d35400"}
+    bar_colors = [colors_map.get(rh["task_id"], "#3498db") for rh in reward_history]
+    bars = ax.bar(labels, rewards, color=bar_colors)
 
     for bar, val in zip(bars, rewards):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
                 f"{val:.2f}", ha="center", va="bottom", fontsize=8)
 
-    ax.axvline(3.5, color="gray", linestyle="--", alpha=0.5)
-    ax.text(1.5, max(rewards) * 0.95, "Booking", ha="center", fontsize=9, color="gray")
-    ax.text(5.5, max(rewards) * 0.95, "E-commerce", ha="center", fontsize=9, color="gray")
     ax.set_ylabel("Avg Reward")
     ax.set_title("GRPO Avg Reward by Task")
     ax.set_ylim(0, 1.0)
@@ -1649,11 +1404,8 @@ if "trained_results" in dir() and trained_results:
 
     ax.set_xticks(list(x))
     ax.set_xticklabels([f"T{t}" for t in task_ids_eval], fontsize=8)
-    ax.axvline(3.5, color="gray", linestyle="--", alpha=0.5)
-    ax.text(1.5, max(trained_vals + random_vals) * 0.95, "Booking", ha="center", fontsize=9, color="gray")
-    ax.text(5.5, max(trained_vals + random_vals) * 0.95, "E-commerce", ha="center", fontsize=9, color="gray")
     ax.set_ylabel("Avg Nodes Completed")
-    ax.set_title("Random vs Trained Agent (All 8 Tasks)")
+    ax.set_title("Random vs Trained Agent")
     ax.legend()
     ax.grid(True, alpha=0.3, axis="y")
 else:
@@ -1675,10 +1427,11 @@ print("  INFINITE DOM -- TRAINING SUMMARY (V2)")
 print("=" * 60)
 
 print(f"\\nModel: {MODEL_ID}")
-print(f"Quantization: QLoRA 4-bit, LoRA rank 32")
+print(f"Quantization: QLoRA 4-bit, LoRA rank 16")
 print(f"Observation Window: {OBS_MAX_CHARS} chars")
 print(f"Step History: last {STEP_HISTORY_WINDOW} actions")
-print(f"Tasks: 8 (4 booking + 4 e-commerce)")
+print(f"Tasks trained: 8 (GRPO all tasks) | Eval: tasks 1, 2, 5")
+print(f"Mode: Budget (~1h A100)")
 
 print(f"\\n--- Data ---")
 print(f"Oracle records: {len(records)}")
@@ -1699,13 +1452,7 @@ if reward_history:
         print(f"  Task {rh['task_id']} ({rh['label']}): loss={rh['loss']:.4f}  reward={r_str}")
 
 print(f"\\n--- Online RL ---")
-if "online_rl_stats" in dir():
-    if online_rl_stats.get("skipped"):
-        print(f"Skipped: {online_rl_stats.get('reason', 'unknown')}")
-    else:
-        print(f"Episodes: {online_rl_stats['episodes']}")
-        print(f"Successful: {online_rl_stats['successful']}")
-        print(f"Training pairs: {online_rl_stats['pairs']}")
+print("Skipped (budget mode -- SFT + GRPO sufficient for demonstration)")
 
 if "trained_results" in dir() and trained_results:
     print(f"\\n--- Live Evaluation ---")
